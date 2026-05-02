@@ -1,0 +1,88 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == "nanthicha.k@ubu.ac.th" ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Validation Blueprints
+    function isValidTournament(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 200 &&
+             data.type in ["Opb", "Opb Upgrade", "Stock Class", "Open Class"] &&
+             data.date is string &&
+             data.status in ["registration", "active", "finished"];
+    }
+
+    function isValidParticipant(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.carCount is number && data.carCount >= 0;
+    }
+
+    function isValidRound(data) {
+      return data.stage is number && data.stage > 0 &&
+             data.index is number &&
+             data.slots is list && data.slots.size() > 0 && data.slots.size() <= 3 &&
+             data.isFinished is bool;
+    }
+
+    // Tournaments
+    match /tournaments/{tournamentId} {
+      allow read: if true;
+      allow create: if isAdmin() && isValidTournament(incoming());
+      allow update: if isAdmin() && isValidTournament(incoming()) && (
+        // Terminal state lock: if finished, only admins can fix
+        (existing().status != "finished") || isAdmin()
+      );
+      allow delete: if isAdmin();
+
+      // Participants Subcollection
+      match /participants/{participantId} {
+        allow read: if true;
+        allow write: if isAdmin() && isValidParticipant(incoming());
+      }
+
+      // Rounds Subcollection
+      match /rounds/{roundId} {
+        allow read: if true;
+        allow create: if isAdmin() && isValidRound(incoming());
+        allow update: if (isAdmin() || isSignedIn()) && isValidRound(incoming()) && (
+          // Logic for updating results: allow only if not finished or if admin
+          (!existing().isFinished) || isAdmin()
+        );
+        allow delete: if isAdmin();
+      }
+    }
+
+    // Admins Whitelist
+    match /admins/{adminId} {
+      allow read: if isSignedIn();
+      // Only the bootstrap admin or current admin can add new admins
+      allow create: if isAdmin();
+    }
+  }
+}

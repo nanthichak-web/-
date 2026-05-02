@@ -1,0 +1,6 @@
+{
+  "name": "UMC Racing: Mini4WD Tournament Manager",
+  "description": "A specialized tournament management app for Mini4WD racing with real-time grid tracking and automated round calculation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}

@@ -1,0 +1,71 @@
+{
+  "entities": {
+    "Tournament": {
+      "title": "Tournament",
+      "description": "A Mini4WD racing tournament",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "type": { "type": "string", "enum": ["Opb", "Opb Upgrade", "Stock Class", "Open Class"] },
+        "date": { "type": "string", "format": "date" },
+        "status": { "type": "string", "enum": ["registration", "active", "finished"] },
+        "totalParticipants": { "type": "number" },
+        "totalCars": { "type": "number" },
+        "winner1": { "type": "string" },
+        "winner2": { "type": "string" },
+        "winner3": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "type", "date", "status"]
+    },
+    "Participant": {
+      "title": "Participant",
+      "description": "A racer in a tournament",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "carCount": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "carCount"]
+    },
+    "Round": {
+      "title": "Round",
+      "description": "A single race round with 3 slots",
+      "type": "object",
+      "properties": {
+        "stage": { "type": "number", "description": "The tournament stage (1, 2, 3...)" },
+        "index": { "type": "number", "description": "Index within the stage" },
+        "slots": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "participantId": { "type": "string" },
+              "playerName": { "type": "string" },
+              "carIndex": { "type": "number" },
+              "result": { "type": "string", "enum": ["1", "2", "3", "DNF", "pending"] }
+            }
+          }
+        },
+        "isFinished": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["stage", "index", "slots", "isFinished"]
+    }
+  },
+  "firestore": {
+    "/tournaments/{tournamentId}": {
+      "schema": "Tournament",
+      "description": "Root tournaments"
+    },
+    "/tournaments/{tournamentId}/participants/{participantId}": {
+      "schema": "Participant",
+      "description": "Participants in a tournament"
+    },
+    "/tournaments/{tournamentId}/rounds/{roundId}": {
+      "schema": "Round",
+      "description": "Race rounds in a tournament"
+    }
+  }
+}
