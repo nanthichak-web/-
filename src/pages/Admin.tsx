@@ -16,6 +16,7 @@ export default function Admin() {
   const [selectedTournament, setSelectedTournament] = useState<Tournament | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [participants, setParticipants] = useState<Participant[]>([]);
+  const [rounds, setRounds] = useState<Round[]>([]);
   const [tournamentToDelete, setTournamentToDelete] = useState<{id: string, name: string} | null>(null);
   const [participantToDelete, setParticipantToDelete] = useState<Participant | null>(null);
   
@@ -30,12 +31,21 @@ export default function Admin() {
     if (!isAdmin || !user) return;
     const q = query(collection(db, 'tournaments'), orderBy('createdAt', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setTournaments(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Tournament)));
+      const updatedTournaments = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Tournament));
+      setTournaments(updatedTournaments);
+      
+      // Keep selectedTournament in sync with real-time updates
+      if (selectedTournament) {
+        const updatedSelected = updatedTournaments.find(t => t.id === selectedTournament.id);
+        if (updatedSelected) {
+          setSelectedTournament(updatedSelected);
+        }
+      }
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, 'tournaments');
     });
     return () => unsubscribe();
-  }, [isAdmin, user]);
+  }, [isAdmin, user, selectedTournament?.id]);
 
   useEffect(() => {
     if (!selectedTournament || !user) return;
@@ -47,6 +57,55 @@ export default function Admin() {
     });
     return () => unsubscribe();
   }, [selectedTournament, user]);
+
+  useEffect(() => {
+    if (!selectedTournament || !user) return;
+    const q = query(collection(db, 'tournaments', selectedTournament.id, 'rounds'), orderBy('stage', 'asc'), orderBy('index', 'asc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setRounds(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Round)));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, `tournaments/${selectedTournament.id}/rounds`);
+    });
+    return () => unsubscribe();
+  }, [selectedTournament, user]);
+
+  const getTournamentStats = () => {
+    if (!rounds.length) return null;
+    
+    const latestStage = Math.max(...rounds.map(r => r.stage));
+    const stageRounds = rounds.filter(r => r.stage === latestStage);
+    const allFinished = stageRounds.every(r => r.isFinished);
+    const allConfirmed = stageRounds.every(r => r.isConfirmed);
+    
+    // Players who qualified from this stage (Result '1')
+    const qualifiedSlots = stageRounds
+      .filter(r => r.isConfirmed)
+      .flatMap(r => r.slots)
+      .filter(s => s.result === '1');
+
+    const qualifiedCars = qualifiedSlots.length;
+    
+    // Group by participant
+    const participantsMap = new Map<string, { name: string, carCount: number }>();
+    qualifiedSlots.forEach(slot => {
+      const existing = participantsMap.get(slot.participantId);
+      if (existing) {
+        existing.carCount += 1;
+      } else {
+        participantsMap.set(slot.participantId, { name: slot.playerName, carCount: 1 });
+      }
+    });
+
+    const qualifiedList = Array.from(participantsMap.values()).sort((a, b) => b.carCount - a.carCount);
+
+    return {
+      latestStage,
+      allFinished,
+      allConfirmed,
+      qualifiedCars,
+      qualifiedList
+    };
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -415,6 +474,10 @@ export default function Admin() {
                       {t.name}
                     </h4>
                     <p className="text-[10px] text-asphalt-500 font-bold uppercase">{t.type} • {t.date}</p>
+                    <div className="flex gap-2 mt-1">
+                      <span className="text-[9px] text-racing-red font-bold uppercase italic">{t.totalParticipants} นักแข่ง</span>
+                      <span className="text-[9px] text-white/40 font-bold uppercase italic">{t.totalCars} คัน</span>
+                    </div>
                   </div>
                   
                   {/* Delete Button Area - Separated from clickable card */}
@@ -475,10 +538,51 @@ export default function Admin() {
                       <Users size={18} className="text-racing-red" />
                       ผู้สมัคร
                     </h4>
-                    <span className="text-xs bg-asphalt-800 text-asphalt-400 px-2 py-1 rounded border border-asphalt-700">
-                      ทั้งหมด: {selectedTournament.totalCars} คัน
-                    </span>
+                    <div className="flex gap-2">
+                      <span className="text-xs bg-asphalt-800 text-racing-red px-2 py-1 rounded border border-asphalt-700 font-bold italic">
+                        {selectedTournament.totalParticipants} นักแข่ง
+                      </span>
+                      <span className="text-xs bg-asphalt-800 text-white px-2 py-1 rounded border border-asphalt-700 font-bold italic">
+                        {selectedTournament.totalCars} คัน
+                      </span>
+                    </div>
                   </div>
+
+                  {selectedTournament.status !== 'registration' && getTournamentStats() && (
+                    <div className="p-4 bg-racing-green/5 border border-racing-green/10 rounded-xl space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black uppercase text-racing-green italic">สรุปสถานะการแข่งขัน (รอบที่ {getTournamentStats()?.latestStage})</span>
+                        {getTournamentStats()?.allConfirmed ? (
+                          <span className="text-[9px] bg-racing-green text-black px-1.5 py-0.5 rounded font-black uppercase">ยืนยันผลครบถ้วนแล้ว</span>
+                        ) : getTournamentStats()?.allFinished ? (
+                          <span className="text-[9px] bg-racing-yellow text-black px-1.5 py-0.5 rounded font-black uppercase">รอการยืนยันผล</span>
+                        ) : (
+                          <span className="text-[9px] bg-asphalt-700 text-asphalt-300 px-1.5 py-0.5 rounded font-black uppercase border border-asphalt-600">กำลังแข่งขัน</span>
+                        )}
+                      </div>
+                      <div className="space-y-2 max-h-[200px] overflow-y-auto pr-2 custom-scrollbar">
+                        {getTournamentStats()?.qualifiedList.map((item, idx) => (
+                          <div key={idx} className="flex items-center justify-between bg-black/20 p-2 rounded border border-white/5">
+                            <span className="text-sm font-bold text-white">{item.name}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-black text-racing-green italic">{item.carCount} คัน</span>
+                              <span className="text-[9px] text-asphalt-500 font-bold uppercase">ผ่านเข้ารอบ</span>
+                            </div>
+                          </div>
+                        ))}
+                        {getTournamentStats()?.qualifiedList.length === 0 && (
+                          <div className="text-center py-4 text-asphalt-500 text-xs font-bold uppercase">
+                            ยังไม่มีข้อมูลผู้ผ่านเข้ารอบ
+                          </div>
+                        )}
+                      </div>
+                      
+                      <div className="pt-2 border-t border-racing-green/10 flex justify-between items-center">
+                        <span className="text-[9px] text-asphalt-400 font-bold uppercase text-center">รวมรถที่ผ่านเข้ารอบทั้งหมด:</span>
+                        <span className="text-sm font-black text-racing-green italic">{getTournamentStats()?.qualifiedCars} คัน</span>
+                      </div>
+                    </div>
+                  )}
 
                   <form className="flex gap-2" onSubmit={(e) => {
                     e.preventDefault();

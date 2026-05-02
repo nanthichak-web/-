@@ -79,7 +79,6 @@ export default function Referee() {
     const round = rounds.find(r => r.id === roundId);
     if (!round) return;
 
-    // Validate if 1st, 2nd, 3rd are uniquely assigned (except DNF/pending)
     const results = round.slots.map(s => s.result);
     const ones = results.filter(r => r === '1').length;
     
@@ -87,10 +86,22 @@ export default function Referee() {
 
     try {
       await updateDoc(doc(db, 'tournaments', tournamentId, 'rounds', roundId), {
-        isFinished: true
+        isFinished: true,
+        isConfirmed: false // Reset confirmation when results are re-saved/re-opened
       });
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `rounds/${roundId}`);
+    }
+  };
+
+  const confirmRound = async (roundId: string) => {
+    if (!tournamentId) return;
+    try {
+      await updateDoc(doc(db, 'tournaments', tournamentId, 'rounds', roundId), {
+        isConfirmed: true
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `rounds/${roundId}/confirm`);
     }
   };
 
@@ -145,9 +156,9 @@ export default function Referee() {
     
     // Check if all rounds in current stage are finished
     const stageRounds = rounds.filter(r => r.stage === currentStage);
-    const allFinished = stageRounds.every(r => r.isFinished);
+    const allConfirmed = stageRounds.every(r => r.isFinished && r.isConfirmed);
     
-    if (!allFinished) return alert('ไม่สามารถดำเนินการต่อได้: ยังบันทึกผลการแข่งขันในรอบนี้ไม่ครบถ้วน');
+    if (!allConfirmed) return alert('ไม่สามารถดำเนินการต่อได้: ยังไม่ได้ยืนยันผลการแข่งขันครบถ้วนในรอบนี้');
 
     // Collect winners (1st and 2nd)
     const advancers: any[] = [];
@@ -220,7 +231,7 @@ export default function Referee() {
   };
 
   const currentStageRounds = rounds.filter(r => r.stage === currentStage);
-  const isStageComplete = currentStageRounds.length > 0 && currentStageRounds.every(r => r.isFinished);
+  const isStageComplete = currentStageRounds.length > 0 && currentStageRounds.every(r => r.isFinished && r.isConfirmed);
 
   if (loading) return <div className="text-center font-bold animate-pulse text-racing-red">กำลังโหลดข้อมูล...</div>;
 
@@ -387,20 +398,31 @@ export default function Referee() {
               {!round.isFinished ? (
                 <button 
                   onClick={() => finishRound(round.id)}
-                  className="w-full btn-racing-secondary py-1 text-[10px]"
+                  className="w-full btn-racing bg-racing-red text-white py-1 text-[10px]"
                 >
-                  ยืนยันผลการแข่งขัน
+                  บันทึกผลการแข่งขัน
                 </button>
               ) : (
-                tournament?.status !== 'finished' && (
-                  <button 
-                    onClick={() => updateDoc(doc(db, 'tournaments', tournamentId!, 'rounds', round.id), { isFinished: false })}
-                    className="w-full py-1 text-[10px] font-bold text-asphalt-500 hover:text-white transition-colors flex items-center justify-center gap-1 border border-asphalt-700 rounded"
-                  >
-                    <Edit2 size={12} />
-                    แก้ไขผล
-                  </button>
-                )
+                <div className="space-y-2">
+                  {!round.isConfirmed && (
+                    <button 
+                      onClick={() => confirmRound(round.id)}
+                      className="w-full btn-racing bg-racing-green text-black py-1 text-[10px]"
+                    >
+                      <CheckCircle2 size={12} />
+                      ยืนยันผล (แสดงหน้าแรก)
+                    </button>
+                  )}
+                  {tournament?.status !== 'finished' && (
+                    <button 
+                      onClick={() => updateDoc(doc(db, 'tournaments', tournamentId!, 'rounds', round.id), { isFinished: false, isConfirmed: false })}
+                      className="w-full py-1 text-[10px] font-bold text-asphalt-500 hover:text-white transition-colors flex items-center justify-center gap-1 border border-asphalt-700 rounded"
+                    >
+                      <Edit2 size={12} />
+                      แก้ไขผล
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           </div>

@@ -115,10 +115,12 @@ export default function TournamentDetails() {
                       
                       <div className="p-3 bg-asphalt-700/50 flex justify-between items-center text-[10px] font-bold uppercase tracking-widest text-asphalt-400">
                         <span>คู่ที่ {round.index}</span>
-                        {round.isFinished ? (
+                        {round.isConfirmed ? (
                           <span className="text-racing-green">ผลอย่างเป็นทางการ</span>
+                        ) : round.isFinished ? (
+                          <span className="text-racing-yellow border border-racing-yellow/30 px-1 py-0.5 rounded">รอการยืนยัน</span>
                         ) : (
-                          <span className="text-racing-yellow">สด</span>
+                          <span className="text-racing-yellow italic">กำลังแข่งขัน</span>
                         )}
                       </div>
 
@@ -128,14 +130,14 @@ export default function TournamentDetails() {
                             <div>
                               <p className={cn(
                                 "font-bold text-sm",
-                                slot.result === '1' ? "text-racing-yellow" : "text-white"
+                                slot.result === '1' && round.isConfirmed ? "text-racing-yellow" : "text-white"
                               )}>
                                 {slot.playerName}
                               </p>
                               <p className="text-[10px] text-asphalt-500 font-bold uppercase italic">รถคันที่ {slot.carIndex}</p>
                             </div>
                             
-                            {slot.result !== 'pending' ? (
+                            {slot.result !== 'pending' && round.isConfirmed ? (
                               <div className={cn(
                                 "flex items-center justify-center w-8 h-8 rounded shrink-0 font-black text-sm border shadow-inner",
                                 slot.result === '1' ? "bg-racing-yellow border-racing-yellow/50 text-black" :
@@ -146,7 +148,9 @@ export default function TournamentDetails() {
                                 {slot.result === 'DNF' ? 'D' : slot.result}
                               </div>
                             ) : (
-                              <div className="w-8 h-8 rounded border-2 border-dashed border-asphalt-700 animate-pulse" />
+                              <div className="w-8 h-8 rounded border-2 border-dashed border-asphalt-700 animate-pulse flex items-center justify-center">
+                                 {round.isFinished && !round.isConfirmed && <Clock size={12} className="text-racing-yellow" />}
+                              </div>
                             )}
                           </div>
                         ))}

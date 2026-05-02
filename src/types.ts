@@ -36,5 +36,6 @@ export interface Round {
   index: number;
   slots: RoundSlot[];
   isFinished: boolean;
+  isConfirmed?: boolean;
   createdAt: any;
 }
