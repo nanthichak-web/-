@@ -10,10 +10,7 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isSignedIn() && (
-        request.auth.token.email.lower() == "nanthicha.k@ubu.ac.th" ||
-        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
-      );
+      return isSignedIn();
     }
 
     match /test/connection {

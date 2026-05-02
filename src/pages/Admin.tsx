@@ -2,7 +2,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import { AuthContext } from '../App';
 import { Shield, Plus, Edit2, Trash2, Users, Play, LogOut, CheckCircle2, RotateCcw, LogIn, LayoutDashboard } from 'lucide-react';
 import { collection, addDoc, updateDoc, doc, onSnapshot, query, orderBy, getDocs, writeBatch, serverTimestamp, deleteDoc, setDoc } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType, loginWithGoogle } from '../lib/firebase';
+import { db, handleFirestoreError, OperationType, loginWithGoogle, loginAnonymously } from '../lib/firebase';
 import { Tournament, Participant, TournamentType, Round, RoundSlot } from '../types';
 import { cn } from '../lib/utils';
 import { format } from 'date-fns';
@@ -48,40 +48,28 @@ export default function Admin() {
     return () => unsubscribe();
   }, [selectedTournament, user]);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (password === 'UMC9896') {
-      setIsAdmin(true);
-      setError('');
+      try {
+        await loginAnonymously();
+        setIsAdmin(true);
+        setError('');
+      } catch (err: any) {
+        console.error("Anonymous login failed", err);
+        if (err.code === 'auth/admin-restricted-operation') {
+          setError("ระบบ 'Anonymous Auth' ยังไม่ได้เปิดใช้งานใน Firebase Console กรุณาแจ้งผู้ดูแลระบบให้เปิดใช้งาน หรือใช้ Google Login แทน");
+        } else {
+          setError("ไม่สามารถเชื่อมต่อฐานข้อมูลได้");
+        }
+      }
     } else {
       setError('รหัสเข้าใช้งานไม่ถูกต้อง');
     }
   };
 
-  const handleGoogleLogin = async () => {
-    try {
-      const result = await loginWithGoogle();
-      // If code was already verified, register this UID as an admin in Firestore
-      if (result.user && password === 'UMC9896') {
-        try {
-          await setDoc(doc(db, 'admins', result.user.uid), {
-            email: result.user.email,
-            verifiedAt: serverTimestamp(),
-            role: 'super_admin'
-          });
-        } catch (e) {
-          console.log("Registered as admin by email or already exists");
-        }
-      }
-    } catch (err) {
-      console.error("Login failed", err);
-      setError("การเข้าสู่ระบบล้มเหลว กรุณาลองใหม่อีกครั้ง");
-    }
-  };
-
   const addTournament = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return alert("กรุณาเข้าสู่ระบบด้วย Google ก่อนเพื่อบันทึกข้อมูล");
     try {
       await addDoc(collection(db, 'tournaments'), {
         name,
@@ -137,7 +125,7 @@ export default function Admin() {
     } catch (err: any) {
       console.error("Recursive delete failed detailed error:", err);
       if (err.message?.includes('permission-denied') || err.code === 'permission-denied') {
-        alert("คุณไม่มีสิทธิ์ในการลบรายการนี้ กรุณาตรวจสอบว่าคุณเข้าสู่ระบบด้วยอีเมล nanthicha.k@ubu.ac.th หรือไม่");
+        alert("คุณไม่มีสิทธิ์ในการลบรายการนี้ กรุณาตรวจสอบการเข้าสู่ระบบเบื้องหลัง");
       } else {
         alert("เกิดข้อผิดพลาดในการลบ: " + (err.message || "Unknown error"));
       }
@@ -289,7 +277,7 @@ export default function Admin() {
     }
   };
 
-  if (!isAdmin) {
+  if (!isAdmin || !user) {
     return (
       <div className="max-w-md mx-auto mt-20">
         <div className="racing-card p-8 space-y-6">
@@ -310,31 +298,58 @@ export default function Admin() {
               onChange={(e) => setPassword(e.target.value)}
               autoFocus
             />
-            {error && <p className="text-racing-red text-center text-sm font-bold">{error}</p>}
-            <button className="btn-racing w-full py-3">ตรวจสอบสิทธิ์</button>
-          </form>
-        </div>
-      </div>
-    );
-  }
+            {error && (
+              <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                <div className="p-4 bg-racing-red/10 border border-racing-red/20 rounded-lg space-y-3">
+                  <p className="text-racing-red text-center text-sm font-bold">{error}</p>
+                  
+                  {error.includes('Anonymous Auth') && (
+                    <div className="space-y-3 pt-2 border-t border-racing-red/10">
+                      <p className="text-[11px] text-white font-bold uppercase italic text-center">ต้องตั้งค่าใน Firebase Console ครั้งแรก:</p>
+                      
+                      <a 
+                        href="https://console.firebase.google.com/project/gen-lang-client-0076452133/authentication/providers" 
+                        target="_blank" 
+                        rel="noreferrer"
+                        className="btn-racing bg-racing-green text-black w-full py-2 flex items-center justify-center gap-2 text-xs"
+                      >
+                        <Shield size={14} />
+                        เปิดหน้าตั้งค่า Firebase
+                      </a>
 
-  if (!user) {
-    return (
-      <div className="max-w-md mx-auto mt-20">
-        <div className="racing-card p-8 space-y-6 text-center">
-          <div className="flex flex-col items-center gap-2">
-            <div className="p-3 bg-racing-red rounded-full">
-              <LogIn size={32} className="text-white" />
-            </div>
-            <h2 className="text-2xl font-bold text-white tracking-tight">การยืนยันตัวตน</h2>
-            <p className="text-asphalt-500 text-sm italic">รหัสถูกต้อง กรุณาเข้าสู่ระบบด้วย Google เพื่อเชื่อมต่อฐานข้อมูล</p>
-          </div>
-          
-          <button onClick={handleGoogleLogin} className="btn-racing w-full py-3 flex items-center justify-center gap-3">
-             <img src="https://www.google.com/favicon.ico" className="w-5 h-5 bg-white rounded-full p-0.5" alt="Google" />
-             เข้าสู่ระบบด้วย GOOGLE
-          </button>
-          <p className="text-[10px] text-asphalt-600 font-bold uppercase tracking-widest">จำเป็นสำหรับการซิงค์ข้อมูล</p>
+                      <div className="text-[10px] text-asphalt-400 space-y-1 bg-black/40 p-3 rounded border border-white/5">
+                        <p className="text-racing-yellow font-bold mb-1">ขั้นตอน:</p>
+                        <p>1. กดปุ่มสีเขียวด้านบน (เปิดหน้าตั้งค่า)</p>
+                        <p>2. กด <span className="text-white font-bold">Add new provider</span></p>
+                        <p>3. เลือก <span className="text-white font-bold">Anonymous</span></p>
+                        <p>4. กดปุ่ม <span className="text-white font-bold">Enable</span> แล้วกด <span className="text-white font-bold">Save</span></p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {error.includes('Anonymous Auth') && (
+                  <button 
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        await loginWithGoogle();
+                        setIsAdmin(true);
+                        setError('');
+                      } catch (e) {
+                        setError("การเข้าสู่ระบบด้วย Google ล้มเหลว");
+                      }
+                    }} 
+                    className="btn-racing-secondary w-full py-2 flex items-center justify-center gap-2"
+                  >
+                    <LogIn size={16} />
+                    ล็อคอินด้วย Google แทน (ถ้ายังไม่พร้อมตั้งค่า)
+                  </button>
+                )}
+              </div>
+            )}
+            <button className="btn-racing w-full py-3">เข้าสู่แผงควบคุม</button>
+          </form>
         </div>
       </div>
     );
