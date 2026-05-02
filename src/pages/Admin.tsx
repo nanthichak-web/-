@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { AuthContext } from '../App';
-import { Shield, Plus, Edit2, Trash2, Users, Play, LogOut, CheckCircle2, RotateCcw, LogIn, LayoutDashboard } from 'lucide-react';
+import { Shield, Plus, Edit2, Trash2, Users, Play, LogOut, CheckCircle2, RotateCcw, LogIn, LayoutDashboard, ArrowLeftRight } from 'lucide-react';
 import { collection, addDoc, updateDoc, doc, onSnapshot, query, orderBy, getDocs, writeBatch, serverTimestamp, deleteDoc, setDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType, loginWithGoogle, loginAnonymously } from '../lib/firebase';
 import { Tournament, Participant, TournamentType, Round, RoundSlot } from '../types';
@@ -50,7 +50,7 @@ export default function Admin() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (password === 'UMC9896') {
+    if (password === 'umc2026') {
       try {
         await loginAnonymously();
         setIsAdmin(true);
@@ -450,10 +450,18 @@ export default function Admin() {
                     <CheckCircle2 size={16} className="text-racing-green" />
                     เข้าสู่โหมดกรรมการ
                   </button>
-                  {selectedTournament.status === 'registration' && (
+                  {selectedTournament.status === 'registration' ? (
                     <button onClick={generateRounds} className="btn-racing text-xs">
                       <RotateCcw size={16} />
                       สร้างรอบการแข่งขัน
+                    </button>
+                  ) : (
+                    <button 
+                      onClick={() => navigate(`/referee/${selectedTournament.id}`)}
+                      className="btn-racing bg-racing-yellow text-black text-xs hover:bg-white"
+                    >
+                      <ArrowLeftRight size={16} />
+                      ตรวจสอบและสลับตัวผู้เล่น
                     </button>
                   )}
                 </div>

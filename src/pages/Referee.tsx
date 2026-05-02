@@ -4,7 +4,7 @@ import { collection, query, where, orderBy, onSnapshot, updateDoc, doc, collecti
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { Tournament, Round, RoundSlot, RoundResult } from '../types';
 import { AuthContext } from '../App';
-import { CheckCircle2, ChevronRight, Trophy, AlertTriangle, Play, Save, Edit2, LayoutDashboard } from 'lucide-react';
+import { CheckCircle2, ChevronRight, Trophy, AlertTriangle, Play, Save, Edit2, LayoutDashboard, ArrowLeftRight, X } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 export default function Referee() {
@@ -16,6 +16,7 @@ export default function Referee() {
   const [rounds, setRounds] = useState<Round[]>([]);
   const [currentStage, setCurrentStage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [sourcePlayer, setSourcePlayer] = useState<{ roundId: string, slotIndex: number, player: RoundSlot } | null>(null);
 
   useEffect(() => {
     if (!tournamentId) return;
@@ -90,6 +91,52 @@ export default function Referee() {
       });
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `rounds/${roundId}`);
+    }
+  };
+
+  const handePlayerSwap = async (targetRoundId: string, targetSlotIndex: number, targetPlayer: RoundSlot) => {
+    if (!tournamentId || !sourcePlayer) return;
+
+    try {
+      const batch = writeBatch(db);
+      
+      // Get the rounds
+      const sourceRound = rounds.find(r => r.id === sourcePlayer.roundId);
+      const targetRound = rounds.find(r => r.id === targetRoundId);
+      
+      if (!sourceRound || !targetRound) return;
+
+      const newSourceSlots = [...sourceRound.slots];
+      
+      if (sourcePlayer.roundId === targetRoundId) {
+        // Swap within same round
+        const temp = newSourceSlots[sourcePlayer.slotIndex];
+        newSourceSlots[sourcePlayer.slotIndex] = newSourceSlots[targetSlotIndex];
+        newSourceSlots[targetSlotIndex] = temp;
+        
+        batch.update(doc(db, 'tournaments', tournamentId, 'rounds', sourcePlayer.roundId), {
+          slots: newSourceSlots
+        });
+      } else {
+        // Swap between different rounds
+        const newTargetSlots = [...targetRound.slots];
+        
+        newSourceSlots[sourcePlayer.slotIndex] = { ...targetPlayer };
+        newTargetSlots[targetSlotIndex] = { ...sourcePlayer.player };
+        
+        batch.update(doc(db, 'tournaments', tournamentId, 'rounds', sourcePlayer.roundId), {
+          slots: newSourceSlots
+        });
+        batch.update(doc(db, 'tournaments', tournamentId, 'rounds', targetRoundId), {
+          slots: newTargetSlots
+        });
+      }
+
+      await batch.commit();
+      setSourcePlayer(null);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `rounds/swap`);
+      alert("เกิดข้อผิดพลาดในการสลับตัวผู้เล่น");
     }
   };
 
@@ -221,6 +268,21 @@ export default function Referee() {
              </div>
           </div>
         </div>
+
+        {sourcePlayer && (
+          <div className="hidden lg:flex items-center gap-4 bg-racing-red/10 px-4 py-2 rounded-lg border border-racing-red/20 animate-pulse">
+            <div className="flex flex-col">
+              <span className="text-[10px] text-racing-red font-black uppercase italic leading-none mb-1">กำลังรอสลับตัว</span>
+              <span className="text-white font-bold text-sm">{sourcePlayer.player.playerName}</span>
+            </div>
+            <button 
+              onClick={() => setSourcePlayer(null)}
+              className="p-1 hover:bg-racing-red/20 rounded transition-colors"
+            >
+              <X size={16} className="text-racing-red" />
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -243,14 +305,49 @@ export default function Referee() {
             </div>
             
             <div className="p-4 space-y-4">
-              {round.slots.map((slot, sIdx) => (
-                <div key={sIdx} className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <p className="font-bold text-white text-sm leading-none">{slot.playerName}</p>
-                      <p className="text-[10px] text-asphalt-500 font-bold uppercase">รถคันที่ {slot.carIndex}</p>
-                    </div>
-                    {!round.isFinished ? (
+              {round.slots.map((slot, sIdx) => {
+                const isSource = sourcePlayer?.roundId === round.id && sourcePlayer?.slotIndex === sIdx;
+                
+                return (
+                  <div key={sIdx} className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <div 
+                        className={cn(
+                          "transition-all cursor-pointer group relative p-2 -m-2 rounded-lg",
+                          isSource ? "bg-racing-red/20 border border-racing-red/30 scale-105" : "hover:bg-asphalt-700/50"
+                        )}
+                        onClick={() => {
+                          if (round.isFinished) return;
+                          if (!sourcePlayer) {
+                            setSourcePlayer({ roundId: round.id, slotIndex: sIdx, player: slot });
+                          } else if (isSource) {
+                            setSourcePlayer(null);
+                          } else {
+                            handePlayerSwap(round.id, sIdx, slot);
+                          }
+                        }}
+                      >
+                        <p className="font-bold text-white text-sm leading-none flex items-center gap-2">
+                          {slot.playerName}
+                          {!round.isFinished && (
+                            <ArrowLeftRight 
+                              size={12} 
+                              className={cn(
+                                "transition-opacity",
+                                isSource ? "opacity-100 text-racing-red" : "opacity-0 group-hover:opacity-100 text-asphalt-500"
+                              )} 
+                            />
+                          )}
+                        </p>
+                        <p className="text-[10px] text-asphalt-500 font-bold uppercase">รถคันที่ {slot.carIndex}</p>
+                        
+                        {!round.isFinished && !sourcePlayer && (
+                           <div className="absolute left-0 -top-6 bg-black text-[9px] text-white px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity font-bold whitespace-nowrap z-10 pointer-events-none">
+                              คลิกเพื่อสลับตัว
+                           </div>
+                        )}
+                      </div>
+                      {!round.isFinished ? (
                       <div className="flex gap-1">
                         {(['1', '2', '3', 'DNF'] as RoundResult[]).map((res) => (
                           <button
@@ -284,7 +381,8 @@ export default function Referee() {
                     )}
                   </div>
                 </div>
-              ))}
+              );
+            })}
               
               {!round.isFinished ? (
                 <button 

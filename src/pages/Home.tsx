@@ -1,13 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useContext } from 'react';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../lib/firebase';
+import { db } from '../lib/firebase';
 import { Tournament } from '../types';
 import { Link } from 'react-router-dom';
-import { Calendar, Users, Car, ChevronRight, Trophy } from 'lucide-react';
+import { Calendar, Users, Car, ChevronRight, Trophy, LayoutDashboard } from 'lucide-react';
 import { motion } from 'motion/react';
 import { format } from 'date-fns';
+import { AuthContext } from '../App';
 
 export default function Home() {
+  const { isAdmin } = useContext(AuthContext);
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -37,6 +39,16 @@ export default function Home() {
           <h2 className="text-4xl font-black text-white italic tracking-tighter">รายการการแข่งขัน</h2>
           <p className="text-asphalt-400 font-medium">ตารางการแข่งขัน Mini4WD อย่างเป็นทางการ</p>
         </div>
+        
+        {isAdmin && (
+          <Link 
+            to="/admin" 
+            className="btn-racing bg-racing-yellow text-black hover:bg-white flex items-center justify-center gap-2 self-start md:self-auto"
+          >
+            <LayoutDashboard size={18} />
+            กลับไปยังแผงควบคุม Admin
+          </Link>
+        )}
       </div>
 
       {tournaments.length === 0 ? (

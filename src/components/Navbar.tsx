@@ -41,7 +41,10 @@ export default function Navbar() {
             </Link>
           ) : (
             <div className="flex items-center gap-3">
-              <span className="text-[10px] px-2 py-1 bg-racing-red/10 text-racing-red border border-racing-red/20 rounded font-bold uppercase">ระบบผู้ดูแล</span>
+              <Link to="/admin" className="btn-racing-secondary text-[10px] py-1">
+                <Shield size={14} className="text-racing-red" />
+                แผงควบคุม
+              </Link>
               <button 
                 onClick={handleLogout}
                 className="text-asphalt-400 hover:text-racing-red transition-colors flex items-center gap-1 text-sm font-bold uppercase tracking-wider"
