@@ -36,6 +36,7 @@ export interface Round {
   index: number;
   slots: RoundSlot[];
   isFinished: boolean;
+  isPublished?: boolean; // New: To hide schedule from main page until confirmed
   isConfirmed?: boolean;
   createdAt: any;
 }

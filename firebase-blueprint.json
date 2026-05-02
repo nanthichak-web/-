@@ -49,6 +49,8 @@
           }
         },
         "isFinished": { "type": "boolean" },
+        "isPublished": { "type": "boolean", "description": "Whether the round schedule is confirmed and visible to public" },
+        "isConfirmed": { "type": "boolean", "description": "Whether the results are confirmed" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["stage", "index", "slots", "isFinished"]

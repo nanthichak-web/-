@@ -4,7 +4,7 @@ import { collection, query, where, orderBy, onSnapshot, updateDoc, doc, collecti
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { Tournament, Round, RoundSlot, RoundResult } from '../types';
 import { AuthContext } from '../App';
-import { CheckCircle2, ChevronRight, Trophy, AlertTriangle, Play, Save, Edit2, LayoutDashboard, ArrowLeftRight, X } from 'lucide-react';
+import { CheckCircle2, ChevronRight, Trophy, AlertTriangle, Play, Save, Edit2, LayoutDashboard, ArrowLeftRight, X, UserPlus, MoveRight } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 export default function Referee() {
@@ -105,6 +105,17 @@ export default function Referee() {
     }
   };
 
+  const publishRound = async (roundId: string) => {
+    if (!tournamentId) return;
+    try {
+      await updateDoc(doc(db, 'tournaments', tournamentId, 'rounds', roundId), {
+        isPublished: true
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `rounds/${roundId}/publish`);
+    }
+  };
+
   const handePlayerSwap = async (targetRoundId: string, targetSlotIndex: number, targetPlayer: RoundSlot) => {
     if (!tournamentId || !sourcePlayer) return;
 
@@ -151,6 +162,38 @@ export default function Referee() {
     }
   };
 
+  const handlePlayerMove = async (targetRoundId: string) => {
+    if (!tournamentId || !sourcePlayer) return;
+    if (sourcePlayer.roundId === targetRoundId) return;
+
+    try {
+      const batch = writeBatch(db);
+      
+      const sourceRound = rounds.find(r => r.id === sourcePlayer.roundId);
+      const targetRound = rounds.find(r => r.id === targetRoundId);
+      
+      if (!sourceRound || !targetRound) return;
+
+      const newSourceSlots = [...sourceRound.slots];
+      const [movedPlayer] = newSourceSlots.splice(sourcePlayer.slotIndex, 1);
+      
+      const newTargetSlots = [...targetRound.slots, { ...movedPlayer, result: 'pending' as RoundResult }];
+      
+      batch.update(doc(db, 'tournaments', tournamentId, 'rounds', sourcePlayer.roundId), {
+        slots: newSourceSlots
+      });
+      batch.update(doc(db, 'tournaments', tournamentId, 'rounds', targetRoundId), {
+        slots: newTargetSlots
+      });
+
+      await batch.commit();
+      setSourcePlayer(null);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `rounds/move`);
+      alert("เกิดข้อผิดพลาดในการย้ายผู้เล่น");
+    }
+  };
+
   const generateNextStage = async () => {
     if (!tournamentId || !tournament) return;
     
@@ -189,6 +232,8 @@ export default function Referee() {
         index: 1,
         slots: advancers,
         isFinished: false,
+        isPublished: false,
+        isConfirmed: false,
         createdAt: serverTimestamp()
       });
     } else {
@@ -202,6 +247,8 @@ export default function Referee() {
           index: Math.floor(i / 3) + 1,
           slots,
           isFinished: false,
+          isPublished: false,
+          isConfirmed: false,
           createdAt: serverTimestamp()
         });
       }
@@ -298,13 +345,22 @@ export default function Referee() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {currentStageRounds.map((round) => (
-          <div key={round.id} className={cn(
+            <div key={round.id} className={cn(
             "racing-card transition-all",
-            round.isFinished ? "opacity-60 border-racing-green/20" : "border-asphalt-700 hover:border-racing-red/20"
+            round.isFinished ? "opacity-60 border-racing-green/20" : 
+            round.isPublished ? "border-asphalt-700" : "border-racing-yellow/30 shadow-lg shadow-racing-yellow/5"
           )}>
             <div className="p-4 bg-asphalt-700/50 flex justify-between items-center border-b border-asphalt-700">
               <h4 className="font-bold text-white flex items-center gap-2 italic">
                 คู่ที่ {round.index}
+                <span className="text-[10px] bg-asphalt-800 px-1.5 py-0.5 rounded text-asphalt-400 not-italic">
+                  {round.slots.length} คัน
+                </span>
+                {!round.isPublished && (
+                  <span className="text-[8px] bg-racing-yellow text-black px-1 rounded font-black uppercase shadow-sm">
+                    ร่างตาราง
+                  </span>
+                )}
               </h4>
               {round.isFinished ? (
                 <span className="text-[10px] text-racing-green font-bold uppercase flex items-center gap-1">
@@ -324,11 +380,11 @@ export default function Referee() {
                     <div className="flex justify-between items-center">
                       <div 
                         className={cn(
-                          "transition-all cursor-pointer group relative p-2 -m-2 rounded-lg",
+                          "transition-all cursor-pointer group relative p-2 -m-2 rounded-lg flex-1 mr-4",
                           isSource ? "bg-racing-red/20 border border-racing-red/30 scale-105" : "hover:bg-asphalt-700/50"
                         )}
-                        onClick={() => {
-                          if (round.isFinished) return;
+                         onClick={() => {
+                          if (round.isPublished || round.isFinished) return;
                           if (!sourcePlayer) {
                             setSourcePlayer({ roundId: round.id, slotIndex: sIdx, player: slot });
                           } else if (isSource) {
@@ -340,7 +396,7 @@ export default function Referee() {
                       >
                         <p className="font-bold text-white text-sm leading-none flex items-center gap-2">
                           {slot.playerName}
-                          {!round.isFinished && (
+                          {!round.isFinished && !round.isPublished && (
                             <ArrowLeftRight 
                               size={12} 
                               className={cn(
@@ -352,56 +408,89 @@ export default function Referee() {
                         </p>
                         <p className="text-[10px] text-asphalt-500 font-bold uppercase">รถคันที่ {slot.carIndex}</p>
                         
-                        {!round.isFinished && !sourcePlayer && (
-                           <div className="absolute left-0 -top-6 bg-black text-[9px] text-white px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity font-bold whitespace-nowrap z-10 pointer-events-none">
-                              คลิกเพื่อสลับตัว
+                        {!round.isFinished && !round.isPublished && !sourcePlayer && (
+                           <div className="absolute left-0 -top-6 bg-black text-[9px] text-white px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity font-bold whitespace-nowrap z-10 pointer-events-none border border-asphalt-700">
+                              คลิกเพื่อเลือก (สลับ/ย้าย)
                            </div>
                         )}
                       </div>
-                      {!round.isFinished ? (
-                      <div className="flex gap-1">
-                        {(['1', '2', '3', 'DNF'] as RoundResult[]).map((res) => (
-                          <button
-                            key={res}
-                            onClick={() => updateSlotResult(round.id, sIdx, res)}
-                            className={cn(
-                              "w-8 h-8 rounded text-[10px] font-black transition-all border flex items-center justify-center",
-                              slot.result === res 
-                                ? (res === '1' ? "bg-racing-yellow border-racing-yellow text-black scale-110 shadow-lg shadow-racing-yellow/20" :
-                                   res === '2' ? "bg-white border-white text-black scale-110" :
-                                   res === '3' ? "bg-orange-600 border-orange-600 text-white scale-110" :
-                                   "bg-red-600 border-red-600 text-white scale-110")
-                                : "bg-asphalt-900 border-asphalt-700 text-asphalt-500 hover:border-asphalt-500"
-                            )}
-                          >
-                            {res === 'DNF' ? 'D' : res}
-                          </button>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="flex flex-col items-end gap-2">
-                        <span className={cn(
-                          "text-[10px] font-black px-2 py-1 rounded uppercase min-w-[2rem] text-center",
-                          slot.result === '1' ? "bg-racing-yellow text-black" :
-                          slot.result === '2' ? "bg-white/90 text-black" :
-                          slot.result === '3' ? "bg-orange-600 text-white" : "bg-red-900 text-white"
-                        )}>
-                          {slot.result}
-                        </span>
-                      </div>
-                    )}
+                      {round.isPublished ? (
+                        <div className="flex gap-1">
+                          {!round.isFinished ? (
+                            (['1', '2', '3', 'DNF'] as RoundResult[]).map((res) => (
+                              <button
+                                key={res}
+                                onClick={() => updateSlotResult(round.id, sIdx, res)}
+                                className={cn(
+                                  "w-8 h-8 rounded text-[10px] font-black transition-all border flex items-center justify-center",
+                                  slot.result === res 
+                                    ? (res === '1' ? "bg-racing-yellow border-racing-yellow text-black scale-110 shadow-lg shadow-racing-yellow/20" :
+                                       res === '2' ? "bg-white border-white text-black scale-110" :
+                                       res === '3' ? "bg-orange-600 border-orange-600 text-white scale-110" :
+                                       "bg-red-600 border-red-600 text-white scale-110")
+                                    : "bg-asphalt-900 border-asphalt-700 text-asphalt-500 hover:border-asphalt-500"
+                                )}
+                              >
+                                {res === 'DNF' ? 'D' : res}
+                              </button>
+                            ))
+                          ) : (
+                            <div className="flex flex-col items-end gap-2">
+                              <span className={cn(
+                                "text-[10px] font-black px-2 py-1 rounded uppercase min-w-[2rem] text-center",
+                                slot.result === '1' ? "bg-racing-yellow text-black" :
+                                slot.result === '2' ? "bg-white/90 text-black" :
+                                slot.result === '3' ? "bg-orange-600 text-white" : "bg-red-900 text-white"
+                              )}>
+                                {slot.result}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-[8px] font-bold text-asphalt-600 uppercase bg-asphalt-800 px-2 py-1 rounded border border-asphalt-700">
+                          รอยืนยันตาราง
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-              
-              {!round.isFinished ? (
+                );
+              })}
+
+              {sourcePlayer && sourcePlayer.roundId !== round.id && !round.isPublished && !round.isFinished && round.slots.length < 12 && (
                 <button 
-                  onClick={() => finishRound(round.id)}
-                  className="w-full btn-racing bg-racing-red text-white py-1 text-[10px]"
+                  onClick={() => handlePlayerMove(round.id)}
+                  className="w-full mt-2 flex items-center justify-center gap-2 py-3 bg-racing-green/10 hover:bg-racing-green/20 border border-dashed border-racing-green/30 rounded-lg text-racing-green text-xs font-black uppercase tracking-tighter transition-all animate-pulse"
                 >
-                  บันทึกผลการแข่งขัน
+                  <UserPlus size={16} />
+                  ย้ายผู้เล่นมาร่วมแข่งคู่นี้
                 </button>
+              )}
+              
+              {!round.isPublished ? (
+                <button 
+                  onClick={() => publishRound(round.id)}
+                  className="w-full btn-racing bg-racing-yellow text-black py-2 text-xs"
+                >
+                  <CheckCircle2 size={16} />
+                  ยืนยันตารางแข่ง (ส่งไปหน้าแรก)
+                </button>
+              ) : !round.isFinished ? (
+                <div className="space-y-2">
+                  <button 
+                    onClick={() => finishRound(round.id)}
+                    className="w-full btn-racing bg-racing-red text-white py-1 text-[10px]"
+                  >
+                    บันทึกผลการแข่งขัน
+                  </button>
+                  <button 
+                    onClick={() => updateDoc(doc(db, 'tournaments', tournamentId!, 'rounds', round.id), { isPublished: false })}
+                    className="w-full py-1 text-[8px] font-bold text-asphalt-500 hover:text-white transition-colors flex items-center justify-center gap-1"
+                  >
+                    <Edit2 size={10} />
+                    แก้ไขตารางการแข่ง (ยกเลิกการประกาศ)
+                  </button>
+                </div>
               ) : (
                 <div className="space-y-2">
                   {!round.isConfirmed && (

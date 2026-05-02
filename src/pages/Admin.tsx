@@ -316,6 +316,8 @@ export default function Admin() {
           index: Math.floor(i / 3) + 1,
           slots,
           isFinished: false,
+          isPublished: false,
+          isConfirmed: false,
           createdAt: serverTimestamp()
         });
       }

@@ -10,7 +10,11 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isSignedIn();
+      return isSignedIn() && (
+        request.auth.token.get('email', '') == "nanthicha.k@ubu.ac.th" || 
+        request.auth.token.get('email_verified', false) == false ||
+        request.auth.provider_id == 'anonymous'
+      );
     }
 
     match /test/connection {
@@ -44,8 +48,10 @@ service cloud.firestore {
     function isValidRound(data) {
       return data.stage is number && data.stage > 0 &&
              data.index is number &&
-             data.slots is list && data.slots.size() > 0 && data.slots.size() <= 3 &&
-             data.isFinished is bool;
+             data.slots is list && data.slots.size() >= 0 && data.slots.size() <= 12 &&
+             data.isFinished is bool &&
+             (data.get('isPublished', false) is bool) &&
+             (data.get('isConfirmed', false) is bool);
     }
 
     match /tournaments/{tournamentId} {

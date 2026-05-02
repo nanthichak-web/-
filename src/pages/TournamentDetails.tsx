@@ -23,7 +23,9 @@ export default function TournamentDetails() {
 
     const q = query(collection(db, 'tournaments', id, 'rounds'), orderBy('stage', 'desc'), orderBy('index', 'asc'));
     const unsubR = onSnapshot(q, (s) => {
-      setRounds(s.docs.map(d => ({ id: d.id, ...d.data() } as Round)));
+      const allRounds = s.docs.map(d => ({ id: d.id, ...d.data() } as Round));
+      // Only show published rounds to public
+      setRounds(allRounds.filter(r => r.isPublished));
       setLoading(false);
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, `tournaments/${id}/rounds`);
