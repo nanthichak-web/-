@@ -37,7 +37,37 @@ export default function TournamentDetails() {
   if (loading) return <div className="text-center py-20 text-asphalt-500 font-bold uppercase tracking-widest animate-pulse">กำลังโหลดข้อมูลสนาม...</div>;
   if (!tournament) return <div className="text-center py-20 text-racing-red">ไม่พบรายการการแข่งขัน</div>;
 
-  const stages = Array.from(new Set(rounds.map(r => r.stage))).sort((a, b) => Number(b) - Number(a));
+  const stagesRaw: number[] = [];
+  rounds.forEach(r => {
+    if (!stagesRaw.includes(r.stage)) stagesRaw.push(r.stage);
+  });
+  const stages = [...stagesRaw].sort((a, b) => b - a);
+
+  // Calculate qualifying stats grouped by stage transition (from stage X to X+1)
+  const stageTransitions = [...stagesRaw]
+    .sort((a, b) => a - b)
+    .reduce((acc: { from: number; to: number; players: [string, number][] }[], stage) => {
+      const stageRounds = rounds.filter(r => r.stage === stage && r.isConfirmed);
+      if (stageRounds.length === 0) return acc;
+
+      const playerCounts: Record<string, number> = {};
+      stageRounds.forEach(round => {
+        round.slots.forEach(slot => {
+          if (slot.result === '1' || slot.result === '2') {
+            playerCounts[slot.playerName] = (playerCounts[slot.playerName] || 0) + 1;
+          }
+        });
+      });
+
+      if (Object.keys(playerCounts).length > 0) {
+        acc.push({
+          from: stage,
+          to: stage + 1,
+          players: Object.entries(playerCounts).sort((a, b) => b[1] - a[1])
+        });
+      }
+      return acc;
+    }, [] as { from: number; to: number; players: [string, number][] }[]);
 
   return (
     <div className="space-y-10">
@@ -73,6 +103,45 @@ export default function TournamentDetails() {
           )}
         </div>
       </div>
+
+      {/* Qualifying Stats Summary by Stage Transition */}
+      {stageTransitions.length > 0 && (
+        <div className="space-y-6">
+           <div className="flex items-center gap-3">
+              <Trophy size={24} className="text-racing-yellow" />
+              <h3 className="text-xl font-black text-white italic tracking-tight uppercase">สรุปยอดรถที่เข้ารอบต่อไป</h3>
+           </div>
+           
+           <div className="grid grid-cols-1 gap-6">
+             {stageTransitions.map((transition) => (
+               <div key={transition.from} className="bg-asphalt-800/40 rounded-xl border border-asphalt-700 overflow-hidden shadow-lg">
+                  <div className="p-3 bg-asphalt-700/50 border-b border-asphalt-700 flex justify-between items-center px-6">
+                    <span className="text-sm font-black text-racing-yellow uppercase italic tracking-widest">
+                      จากรอบที่ {transition.from} เข้าสู่รอบที่ {transition.to}
+                    </span>
+                    <span className="text-[10px] text-asphalt-400 font-bold uppercase italic">ได้รับการจัดสรรเป็นคู่แข่งในรอบถัดไป</span>
+                  </div>
+                  <div className="p-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                      {transition.players.map(([name, count]) => (
+                        <div key={name} className="flex justify-between items-center bg-asphalt-900/60 p-4 rounded-lg border border-asphalt-700/50 group hover:border-racing-green/50 transition-all">
+                          <div>
+                            <p className="text-white font-black text-lg italic tracking-tight group-hover:text-racing-green transition-colors">{name}</p>
+                            <p className="text-[9px] text-asphalt-500 font-black uppercase italic">ผ่านเข้ารอบ</p>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-2xl font-black text-racing-green italic">{count}</span>
+                            <span className="text-[10px] text-asphalt-600 font-bold uppercase ml-1">คัน</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+               </div>
+             ))}
+           </div>
+        </div>
+      )}
 
       {/* Brackets / Rounds Section */}
       <div className="space-y-12">
@@ -115,43 +184,56 @@ export default function TournamentDetails() {
                         </div>
                       )}
                       
-                      <div className="p-3 bg-asphalt-700/50 flex justify-between items-center text-[10px] font-bold uppercase tracking-widest text-asphalt-400">
-                        <span>คู่ที่ {round.index}</span>
+                      <div className="p-4 bg-asphalt-700/70 flex justify-between items-center text-sm font-black uppercase tracking-wider text-white italic">
+                        <span className="flex items-center gap-2">
+                          <Trophy size={14} className="text-racing-yellow" />
+                          คู่ที่ {round.index}
+                        </span>
                         {round.isConfirmed ? (
-                          <span className="text-racing-green">ผลอย่างเป็นทางการ</span>
+                          <span className="text-racing-green text-[10px] bg-racing-green/10 px-2 py-0.5 rounded border border-racing-green/30">ผลอย่างเป็นทางการ</span>
                         ) : round.isFinished ? (
-                          <span className="text-racing-yellow border border-racing-yellow/30 px-1 py-0.5 rounded">รอการยืนยัน</span>
+                          <span className="text-racing-yellow text-[10px] border border-racing-yellow/30 px-2 py-0.5 rounded bg-racing-yellow/5">รอการยืนยัน</span>
                         ) : (
-                          <span className="text-racing-yellow italic">กำลังแข่งขัน</span>
+                          <span className="text-racing-yellow text-[10px] italic animate-pulse flex items-center gap-1">
+                            <Clock size={10} />
+                            กำลังแข่งขัน
+                          </span>
                         )}
                       </div>
 
                       <div className="divide-y divide-asphalt-700/50">
                         {round.slots.map((slot, sIdx) => (
-                          <div key={sIdx} className="p-4 flex justify-between items-center bg-asphalt-800/30">
-                            <div>
+                          <div key={sIdx} className="p-5 flex justify-between items-center bg-asphalt-800/40 hover:bg-asphalt-800 transition-colors">
+                            <div className="space-y-1">
                               <p className={cn(
-                                "font-bold text-sm",
-                                slot.result === '1' && round.isConfirmed ? "text-racing-yellow" : "text-white"
+                                "font-black text-xl tracking-tight italic",
+                                slot.result === '1' && round.isConfirmed ? "text-racing-green" : "text-white"
                               )}>
                                 {slot.playerName}
                               </p>
-                              <p className="text-[10px] text-asphalt-500 font-bold uppercase italic">รถคันที่ {slot.carIndex}</p>
+                              <div className="flex items-center gap-2">
+                                <p className="text-xs text-asphalt-400 font-bold uppercase tracking-tighter">รถคันที่ {slot.carIndex}</p>
+                                {slot.result === '1' && round.isConfirmed && (
+                                  <span className="text-[10px] font-black text-racing-green uppercase italic flex items-center gap-0.5">
+                                    <Award size={10} /> แชมป์สนาม
+                                  </span>
+                                )}
+                              </div>
                             </div>
                             
                             {slot.result !== 'pending' && round.isConfirmed ? (
                               <div className={cn(
-                                "flex items-center justify-center w-8 h-8 rounded shrink-0 font-black text-sm border shadow-inner",
-                                slot.result === '1' ? "bg-racing-yellow border-racing-yellow/50 text-black" :
-                                slot.result === '2' ? "bg-slate-300 border-white/50 text-black" :
-                                slot.result === '3' ? "bg-orange-700 border-orange-500/50 text-white" :
-                                "bg-red-950 border-red-800/50 text-white opacity-50"
+                                "flex items-center justify-center w-10 h-10 rounded-lg shrink-0 font-black text-xl border-2 shadow-xl transform rotate-3",
+                                slot.result === '1' ? "bg-racing-green border-racing-green/50 text-white shadow-racing-green/20" :
+                                slot.result === '2' ? "bg-yellow-400 border-yellow-300 text-black shadow-yellow-400/20" :
+                                slot.result === '3' ? "bg-racing-red border-racing-red/50 text-white shadow-racing-red/20" :
+                                "bg-racing-red border-racing-red/50 text-white opacity-70"
                               )}>
                                 {slot.result === 'DNF' ? 'D' : slot.result}
                               </div>
                             ) : (
-                              <div className="w-8 h-8 rounded border-2 border-dashed border-asphalt-700 animate-pulse flex items-center justify-center">
-                                 {round.isFinished && !round.isConfirmed && <Clock size={12} className="text-racing-yellow" />}
+                              <div className="w-10 h-10 rounded-lg border-2 border-dashed border-asphalt-700 animate-pulse flex items-center justify-center bg-asphalt-900/50">
+                                 {round.isFinished && !round.isConfirmed && <Clock size={16} className="text-racing-yellow" />}
                               </div>
                             )}
                           </div>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { AuthContext } from '../App';
-import { Shield, Plus, Edit2, Trash2, Users, Play, LogOut, CheckCircle2, RotateCcw, LogIn, LayoutDashboard, ArrowLeftRight } from 'lucide-react';
+import { Shield, Plus, Edit2, Trash2, Users, Play, LogOut, CheckCircle2, RotateCcw, LogIn, LayoutDashboard, ArrowLeftRight, Trophy } from 'lucide-react';
 import { collection, addDoc, updateDoc, doc, onSnapshot, query, orderBy, getDocs, writeBatch, serverTimestamp, deleteDoc, setDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType, loginWithGoogle, loginAnonymously } from '../lib/firebase';
 import { Tournament, Participant, TournamentType, Round, RoundSlot } from '../types';
@@ -105,6 +105,38 @@ export default function Admin() {
       qualifiedCars,
       qualifiedList
     };
+  };
+
+  const getStageTransitions = () => {
+    const stagesRaw: number[] = [];
+    rounds.forEach(r => {
+      if (!stagesRaw.includes(r.stage)) stagesRaw.push(r.stage);
+    });
+
+    return stagesRaw
+      .sort((a, b) => a - b)
+      .reduce((acc: { from: number; to: number; players: [string, number][] }[], stage) => {
+        const stageRounds = rounds.filter(r => r.stage === stage && r.isConfirmed);
+        if (stageRounds.length === 0) return acc;
+
+        const playerCounts: Record<string, number> = {};
+        stageRounds.forEach(round => {
+          round.slots.forEach(slot => {
+            if (slot.result === '1' || slot.result === '2') {
+              playerCounts[slot.playerName] = (playerCounts[slot.playerName] || 0) + 1;
+            }
+          });
+        });
+
+        if (Object.keys(playerCounts).length > 0) {
+          acc.push({
+            from: stage,
+            to: stage + 1,
+            players: Object.entries(playerCounts).sort((a, b) => b[1] - a[1])
+          });
+        }
+        return acc;
+      }, []);
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -340,50 +372,52 @@ export default function Admin() {
 
   if (!isAdmin || !user) {
     return (
-      <div className="max-w-md mx-auto mt-20">
-        <div className="racing-card p-8 space-y-6">
-          <div className="flex flex-col items-center gap-2">
-            <div className="p-3 bg-racing-red rounded-full">
-              <Shield size={32} className="text-white" />
+      <div className="max-w-2xl mx-auto mt-32 px-4">
+        <div className="bg-zinc-900 p-16 space-y-10 rounded-[40px] border-2 border-zinc-800 shadow-3xl text-center">
+          <div className="flex flex-col items-center gap-6">
+            <div className="p-6 bg-rose-600 rounded-[32px] shadow-2xl shadow-rose-600/40 rotate-3">
+              <Shield size={64} className="text-white" />
             </div>
-            <h2 className="text-2xl font-bold text-white tracking-tight">การเข้าถึงของผู้ดูแลระบบ</h2>
-            <p className="text-asphalt-500 text-sm">กรุณาใส่รหัสผ่านเพื่อเข้าใช้งานระบบ</p>
+            <div className="space-y-2">
+              <h2 className="text-5xl font-black text-white italic tracking-tighter uppercase underline decoration-rose-600 decoration-8 underline-offset-8">ADMIN ENTRY</h2>
+              <p className="text-zinc-500 text-lg font-bold uppercase tracking-[0.4em] italic">Authentication Required</p>
+            </div>
           </div>
 
-          <form onSubmit={handleLogin} className="space-y-4">
+          <form onSubmit={handleLogin} className="space-y-8">
             <input
               type="password"
-              placeholder="รหัสผ่าน"
-              className="input-racing text-center text-xl tracking-widest font-mono"
+              placeholder="••••••••"
+              className="bg-zinc-950 border-2 border-zinc-800 rounded-2xl w-full py-6 text-center text-4xl tracking-[0.5em] font-black text-rose-500 focus:border-rose-600 outline-none transition-all shadow-inner"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoFocus
             />
             {error && (
-              <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
-                <div className="p-4 bg-racing-red/10 border border-racing-red/20 rounded-lg space-y-3">
-                  <p className="text-racing-red text-center text-sm font-bold">{error}</p>
+              <div className="space-y-6 animate-in fade-in slide-in-from-top-4 duration-500">
+                <div className="p-6 bg-rose-600/5 border-2 border-rose-600/20 rounded-3xl space-y-4">
+                  <p className="text-rose-500 text-center text-lg font-black italic tracking-tight">{error}</p>
                   
                   {error.includes('Anonymous Auth') && (
-                    <div className="space-y-3 pt-2 border-t border-racing-red/10">
-                      <p className="text-[11px] text-white font-bold uppercase italic text-center">ต้องตั้งค่าใน Firebase Console ครั้งแรก:</p>
+                    <div className="space-y-6 pt-6 border-t border-rose-600/10">
+                      <p className="text-sm text-stone-300 font-bold uppercase italic text-center tracking-widest">Required Configuration:</p>
                       
                       <a 
                         href="https://console.firebase.google.com/project/gen-lang-client-0076452133/authentication/providers" 
                         target="_blank" 
                         rel="noreferrer"
-                        className="btn-racing bg-racing-green text-black w-full py-2 flex items-center justify-center gap-2 text-xs"
+                        className="btn-racing bg-emerald-600 text-white w-full py-5 flex items-center justify-center gap-4 text-lg rounded-2xl shadow-xl shadow-emerald-900/20"
                       >
-                        <Shield size={14} />
-                        เปิดหน้าตั้งค่า Firebase
+                        <Shield size={24} />
+                        OPEN FIREBASE CONSOLE
                       </a>
 
-                      <div className="text-[10px] text-asphalt-400 space-y-1 bg-black/40 p-3 rounded border border-white/5">
-                        <p className="text-racing-yellow font-bold mb-1">ขั้นตอน:</p>
-                        <p>1. กดปุ่มสีเขียวด้านบน (เปิดหน้าตั้งค่า)</p>
-                        <p>2. กด <span className="text-white font-bold">Add new provider</span></p>
-                        <p>3. เลือก <span className="text-white font-bold">Anonymous</span></p>
-                        <p>4. กดปุ่ม <span className="text-white font-bold">Enable</span> แล้วกด <span className="text-white font-bold">Save</span></p>
+                      <div className="text-xs text-zinc-500 space-y-2 bg-black/40 p-6 rounded-3xl border border-zinc-800 text-left">
+                        <p className="text-amber-500 font-black uppercase tracking-widest mb-2 italic">Instruction:</p>
+                        <p className="flex gap-2"><span>1.</span><span>Click the button above to visit Firebase Console.</span></p>
+                        <p className="flex gap-2"><span>2.</span><span>Go to <span className="text-stone-100 font-bold">Authentication</span> &gt; <span className="text-stone-100 font-bold">Sign-in method</span>.</span></p>
+                        <p className="flex gap-2"><span>3.</span><span>Click <span className="text-stone-100 font-bold underline decoration-amber-500 decoration-2">Add new provider</span> and select <span className="text-stone-100 font-bold italic">Anonymous</span>.</span></p>
+                        <p className="flex gap-2"><span>4.</span><span>Enable it and <span className="text-stone-100 font-bold">Save</span>.</span></p>
                       </div>
                     </div>
                   )}
@@ -401,15 +435,15 @@ export default function Admin() {
                         setError("การเข้าสู่ระบบด้วย Google ล้มเหลว");
                       }
                     }} 
-                    className="btn-racing-secondary w-full py-2 flex items-center justify-center gap-2"
+                    className="w-full py-5 flex items-center justify-center gap-4 text-lg font-black italic text-stone-400 bg-zinc-800 rounded-2xl hover:bg-zinc-700 hover:text-white transition-all shadow-lg active:scale-95"
                   >
-                    <LogIn size={16} />
-                    ล็อคอินด้วย Google แทน (ถ้ายังไม่พร้อมตั้งค่า)
+                    <LogIn size={24} />
+                    LOGIN WITH GOOGLE ACCOUNT
                   </button>
                 )}
               </div>
             )}
-            <button className="btn-racing w-full py-3">เข้าสู่แผงควบคุม</button>
+            <button className="btn-racing bg-rose-600 text-white w-full py-6 text-2xl font-black italic shadow-2xl shadow-rose-600/30 rounded-2xl active:scale-95 transition-all">AUTHORIZED ACCESS</button>
           </form>
         </div>
       </div>
@@ -417,73 +451,79 @@ export default function Admin() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-10 min-h-screen bg-zinc-950 -m-4 p-4 sm:-m-8 sm:p-8">
       {/* Admin Topbar */}
-      <div className="sticky top-0 z-30 bg-asphalt-900/80 backdrop-blur-md border-b border-asphalt-800 py-4 mb-8 -mx-4 px-4 sm:-mx-8 sm:px-8">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div className="flex items-center gap-4">
+      <div className="sticky top-0 z-40 bg-zinc-900 shadow-2xl border-b-2 border-rose-900/30 py-6 mb-12 -mx-4 px-6 sm:-mx-8 sm:px-10">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+          <div className="flex items-center gap-8">
             <button 
               onClick={() => setSelectedTournament(null)}
               className={cn(
-                "flex items-center gap-2 px-4 py-2 rounded-lg transition-all font-black italic tracking-tighter uppercase",
-                !selectedTournament ? "bg-racing-red text-white shadow-lg shadow-racing-red/20 scale-105" : "text-asphalt-400 hover:text-white bg-asphalt-800"
+                "flex items-center gap-4 px-6 py-3 rounded-xl transition-all font-black italic tracking-tighter uppercase",
+                !selectedTournament ? "bg-rose-600 text-white shadow-2xl shadow-rose-600/20 scale-105" : "text-stone-400 hover:text-white bg-zinc-800"
               )}
             >
-              <LayoutDashboard size={20} />
-              <span className="text-xl">แผงควบคุม</span>
+              <LayoutDashboard size={28} />
+              <span className="text-3xl">แผงควบคุม</span>
             </button>
             
             {selectedTournament && (
               <>
-                <div className="h-8 w-px bg-asphalt-700 hidden md:block" />
+                <div className="h-12 w-0.5 bg-zinc-700 hidden md:block" />
                 <div className="flex flex-col">
-                  <h2 className="text-white font-bold leading-tight">{selectedTournament.name}</h2>
-                  <p className="text-[10px] text-asphalt-500 font-bold uppercase tracking-widest">{selectedTournament.type} MANAGER</p>
+                  <h2 className="text-white text-3xl font-black italic tracking-tight leading-none">{selectedTournament.name}</h2>
+                  <p className="text-[12px] text-rose-500 font-bold uppercase tracking-[0.2em] mt-1">{selectedTournament.type} ADMINISTRATION</p>
                 </div>
               </>
             )}
           </div>
           
-          <div className="flex items-center gap-3 w-full md:w-auto">
-            <button onClick={() => setShowAddModal(true)} className="btn-racing w-full md:w-auto py-2 h-10">
-              <Plus size={18} />
+          <div className="flex items-center gap-4 w-full md:w-auto">
+            <button onClick={() => setShowAddModal(true)} className="btn-racing bg-amber-500 text-black hover:bg-white w-full md:w-auto py-3 px-8 h-14 text-lg">
+              <Plus size={24} />
               <span>สร้างการแข่งขัน</span>
             </button>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
         {/* Tournament List Sidebar */}
-        <div className="lg:col-span-4 space-y-4">
-          <h3 className="text-sm font-bold uppercase tracking-widest text-asphalt-500 flex items-center gap-2">
-            <Play size={14} /> รายการแข่ง
+        <div className="lg:col-span-4 space-y-6">
+          <h3 className="text-base font-black uppercase tracking-[0.3em] text-stone-500 flex items-center gap-3 italic border-b border-zinc-800 pb-2">
+            <Play size={18} className="text-rose-600" /> รายการแข่งทั้งหมด
           </h3>
-            <div className="space-y-3">
+            <div className="space-y-4">
               {tournaments.map(t => (
                 <div 
                   key={t.id}
                   className={cn(
-                    "racing-card group relative transition-all flex items-stretch overflow-hidden border-l-4",
-                    selectedTournament?.id === t.id ? "bg-asphalt-700 border-asphalt-600 border-l-racing-red" : "border-l-transparent hover:bg-asphalt-700/50"
+                    "racing-card group relative transition-all flex items-stretch overflow-hidden border-l-8 rounded-2xl",
+                    selectedTournament?.id === t.id ? "bg-zinc-800 border-zinc-700 border-l-rose-600 shadow-2xl" : "bg-zinc-900 border-l-transparent hover:bg-zinc-800/80 hover:scale-[1.02]"
                   )}
                 >
                   <div 
                     onClick={() => setSelectedTournament(t)}
-                    className="flex-grow p-4 cursor-pointer"
+                    className="flex-grow p-6 cursor-pointer"
                   >
-                    <h4 className={cn("font-bold transition-colors", selectedTournament?.id === t.id ? "text-racing-red" : "text-white")}>
+                    <h4 className={cn("text-xl font-black italic transition-colors leading-tight", selectedTournament?.id === t.id ? "text-rose-500" : "text-stone-100")}>
                       {t.name}
                     </h4>
-                    <p className="text-[10px] text-asphalt-500 font-bold uppercase">{t.type} • {t.date}</p>
-                    <div className="flex gap-2 mt-1">
-                      <span className="text-[9px] text-racing-red font-bold uppercase italic">{t.totalParticipants} นักแข่ง</span>
-                      <span className="text-[9px] text-white/40 font-bold uppercase italic">{t.totalCars} คัน</span>
+                    <p className="text-[12px] text-zinc-500 font-bold uppercase tracking-widest mt-1">{t.type} • {t.date}</p>
+                    <div className="flex gap-4 mt-3">
+                      <div className="flex items-center gap-2">
+                        <Users size={14} className="text-rose-600" />
+                        <span className="text-[11px] text-stone-300 font-black uppercase italic">{t.totalParticipants} นักแข่ง</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Trophy size={14} className="text-amber-500" />
+                        <span className="text-[11px] text-stone-300 font-black uppercase italic">{t.totalCars} คัน</span>
+                      </div>
                     </div>
                   </div>
                   
                   {/* Delete Button Area - Separated from clickable card */}
-                  <div className="flex items-center px-4 bg-asphalt-900/10 border-l border-asphalt-800 relative z-40">
+                  <div className="flex items-center px-6 bg-zinc-950/20 border-l border-zinc-800/50 relative z-40">
                     <button 
                       type="button"
                       onClick={(e) => { 
@@ -491,10 +531,10 @@ export default function Admin() {
                         e.stopPropagation(); 
                         setTournamentToDelete({ id: t.id, name: t.name });
                       }}
-                      className="p-3 text-asphalt-600 hover:text-white hover:bg-racing-red rounded-xl transition-all flex items-center justify-center cursor-pointer group-hover:scale-105 active:scale-95 relative z-50 shadow-sm"
+                      className="p-4 text-zinc-600 hover:text-white hover:bg-rose-600 rounded-2xl transition-all flex items-center justify-center cursor-pointer group-hover:scale-110 active:scale-95 relative z-50 shadow-xl"
                       title="ลบรายการการแข่งขัน"
                     >
-                      <Trash2 size={18} />
+                      <Trash2 size={22} />
                     </button>
                   </div>
                 </div>
@@ -505,120 +545,132 @@ export default function Admin() {
         {/* Content Area */}
         <div className="lg:col-span-8">
           {selectedTournament ? (
-            <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
-              <div className="flex justify-end items-center gap-4 border-b border-asphalt-800 pb-4">
-                <div className="flex gap-2">
+            <div className="space-y-12 animate-in fade-in slide-in-from-right-4 duration-500">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 border-b-2 border-zinc-900 pb-8">
+                <div className="flex flex-col">
+                  <h3 className="text-4xl font-black text-white italic tracking-tighter uppercase">{selectedTournament.name}</h3>
+                  <div className="flex items-center gap-3 mt-2">
+                    <span className="px-3 py-1 bg-rose-600/20 text-rose-500 border border-rose-600/30 rounded text-[10px] font-black uppercase tracking-widest italic">
+                      {selectedTournament.status}
+                    </span>
+                    <span className="text-zinc-500 font-bold text-xs uppercase tracking-[0.2em]">{format(new Date(selectedTournament.date), 'MMMM d, yyyy')}</span>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 w-full sm:w-auto">
                   <button 
                     onClick={() => navigate(`/referee/${selectedTournament.id}`)}
-                    className="btn-racing-secondary text-xs"
+                    className="btn-racing-secondary text-base py-3 px-6 h-14"
                   >
-                    <CheckCircle2 size={16} className="text-racing-green" />
+                    <CheckCircle2 size={24} className="text-rose-500" />
                     เข้าสู่โหมดกรรมการ
                   </button>
                   {selectedTournament.status === 'registration' ? (
-                    <button onClick={generateRounds} className="btn-racing text-xs">
-                      <RotateCcw size={16} />
+                    <button onClick={generateRounds} className="btn-racing bg-rose-600 text-white text-base py-3 px-6 h-14">
+                      <RotateCcw size={24} />
                       สร้างรอบการแข่งขัน
                     </button>
                   ) : (
                     <button 
                       onClick={() => navigate(`/referee/${selectedTournament.id}`)}
-                      className="btn-racing bg-racing-yellow text-black text-xs hover:bg-white"
+                      className="btn-racing bg-amber-500 text-black text-base py-3 px-6 h-14 hover:bg-white"
                     >
-                      <ArrowLeftRight size={16} />
-                      ตรวจสอบและสลับตัวผู้เล่น
+                      <ArrowLeftRight size={24} />
+                      จัดการสลับตัว
                     </button>
                   )}
                 </div>
               </div>
 
               {/* Participant Management */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div className="space-y-6">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-lg font-bold text-white flex items-center gap-2">
-                      <Users size={18} className="text-racing-red" />
-                      ผู้สมัคร
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-12">
+                <div className="space-y-10">
+                  <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
+                    <h4 className="text-2xl font-black text-white italic uppercase flex items-center gap-3">
+                      <Users size={28} className="text-rose-600" />
+                      รายชื่อผู้สมัคร
                     </h4>
-                    <div className="flex gap-2">
-                      <span className="text-xs bg-asphalt-800 text-racing-red px-2 py-1 rounded border border-asphalt-700 font-bold italic">
-                        {selectedTournament.totalParticipants} นักแข่ง
-                      </span>
-                      <span className="text-xs bg-asphalt-800 text-white px-2 py-1 rounded border border-asphalt-700 font-bold italic">
-                        {selectedTournament.totalCars} คัน
-                      </span>
+                    <div className="flex gap-3">
+                      <div className="text-right">
+                        <p className="text-2xl font-black text-rose-500 italic leading-none">{selectedTournament.totalParticipants}</p>
+                        <p className="text-[10px] text-zinc-500 font-bold uppercase mt-1">นักแข่ง</p>
+                      </div>
+                      <div className="w-px h-8 bg-zinc-800 mx-2" />
+                      <div className="text-right">
+                        <p className="text-2xl font-black text-amber-500 italic leading-none">{selectedTournament.totalCars}</p>
+                        <p className="text-[10px] text-zinc-500 font-bold uppercase mt-1">จำนวนรถ</p>
+                      </div>
                     </div>
                   </div>
 
-                  {selectedTournament.status !== 'registration' && getTournamentStats() && (
-                    <div className="p-4 bg-racing-green/5 border border-racing-green/10 rounded-xl space-y-3">
+                  {selectedTournament.status !== 'registration' && getStageTransitions().length > 0 && (
+                    <div className="space-y-6">
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-black uppercase text-racing-green italic">สรุปสถานะการแข่งขัน (รอบที่ {getTournamentStats()?.latestStage})</span>
-                        {getTournamentStats()?.allConfirmed ? (
-                          <span className="text-[9px] bg-racing-green text-black px-1.5 py-0.5 rounded font-black uppercase">ยืนยันผลครบถ้วนแล้ว</span>
-                        ) : getTournamentStats()?.allFinished ? (
-                          <span className="text-[9px] bg-racing-yellow text-black px-1.5 py-0.5 rounded font-black uppercase">รอการยืนยันผล</span>
-                        ) : (
-                          <span className="text-[9px] bg-asphalt-700 text-asphalt-300 px-1.5 py-0.5 rounded font-black uppercase border border-asphalt-600">กำลังแข่งขัน</span>
-                        )}
+                         <h4 className="text-xl font-black uppercase text-amber-500 italic flex items-center gap-3">
+                           <Trophy size={24} /> สรุปยอดรถที่เข้ารอบ
+                         </h4>
+                         <span className="text-[11px] text-zinc-500 font-black uppercase italic tracking-widest">REAL-TIME STATS</span>
                       </div>
-                      <div className="space-y-2 max-h-[200px] overflow-y-auto pr-2 custom-scrollbar">
-                        {getTournamentStats()?.qualifiedList.map((item, idx) => (
-                          <div key={idx} className="flex items-center justify-between bg-black/20 p-2 rounded border border-white/5">
-                            <span className="text-sm font-bold text-white">{item.name}</span>
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-black text-racing-green italic">{item.carCount} คัน</span>
-                              <span className="text-[9px] text-asphalt-500 font-bold uppercase">ผ่านเข้ารอบ</span>
+                      
+                      <div className="space-y-6 max-h-[600px] overflow-y-auto pr-4 custom-scrollbar">
+                        {getStageTransitions().reverse().map((transition) => (
+                          <div key={transition.from} className="bg-zinc-900 rounded-3xl border-2 border-zinc-800 overflow-hidden shadow-2xl">
+                            <div className="p-4 bg-zinc-800/50 border-b-2 border-zinc-900 px-8 flex justify-between items-center">
+                              <span className="text-sm font-black text-white uppercase italic tracking-[0.2em]">
+                                รอบที่ {transition.from} → {transition.to}
+                              </span>
+                              <span className="text-[10px] text-zinc-500 font-bold uppercase italic">QUALIFIERS</span>
+                            </div>
+                            <div className="p-8 space-y-4">
+                              {transition.players.map(([name, count]) => (
+                                <div key={name} className="flex justify-between items-center bg-zinc-950/40 p-5 rounded-2xl border border-zinc-800/50 hover:border-rose-900/30 transition-colors group">
+                                  <span className="text-xl font-black text-stone-200 group-hover:text-rose-500 transition-colors italic">{name}</span>
+                                  <div className="flex items-baseline gap-3">
+                                    <span className="text-3xl font-black text-rose-500 italic">{count}</span>
+                                    <span className="text-[11px] text-zinc-600 font-bold uppercase tracking-widest">CARS</span>
+                                  </div>
+                                </div>
+                              ))}
                             </div>
                           </div>
                         ))}
-                        {getTournamentStats()?.qualifiedList.length === 0 && (
-                          <div className="text-center py-4 text-asphalt-500 text-xs font-bold uppercase">
-                            ยังไม่มีข้อมูลผู้ผ่านเข้ารอบ
-                          </div>
-                        )}
-                      </div>
-                      
-                      <div className="pt-2 border-t border-racing-green/10 flex justify-between items-center">
-                        <span className="text-[9px] text-asphalt-400 font-bold uppercase text-center">รวมรถที่ผ่านเข้ารอบทั้งหมด:</span>
-                        <span className="text-sm font-black text-racing-green italic">{getTournamentStats()?.qualifiedCars} คัน</span>
                       </div>
                     </div>
                   )}
 
-                  <form className="flex gap-2" onSubmit={(e) => {
+                  <form className="flex gap-4" onSubmit={(e) => {
                     e.preventDefault();
                     const target = e.target as any;
                     addParticipant(target.pName.value, parseInt(target.carCount.value));
                     target.pName.value = '';
                     target.carCount.value = '1';
                   }}>
-                    <input name="pName" placeholder="ชื่อนักแข่ง" className="input-racing text-sm" required />
-                    <input name="carCount" type="number" min="1" defaultValue="1" className="bg-asphalt-700 border border-asphalt-600 rounded px-2 w-16 text-sm outline-none focus:border-racing-red" required />
-                    <button type="submit" className="bg-racing-red p-2 rounded hover:brightness-110 transition-all text-white">
-                      <Plus size={20} />
+                    <input name="pName" placeholder="ชื่อนักแข่ง" className="input-racing bg-zinc-900 border-zinc-800 text-lg h-16 px-6" required />
+                    <input name="carCount" type="number" min="1" defaultValue="1" className="bg-zinc-900 border-2 border-zinc-800 rounded-2xl px-4 w-28 text-xl text-white font-black italic shadow-inner focus:border-rose-600 outline-none" required />
+                    <button type="submit" className="bg-rose-600 px-8 rounded-2xl hover:bg-rose-500 transition-all text-white shadow-xl shadow-rose-600/20 active:scale-95">
+                      <Plus size={32} />
                     </button>
                   </form>
 
-                  <div className="bg-asphalt-800/50 rounded-lg border border-asphalt-700 divide-y divide-asphalt-700 max-h-[400px] overflow-y-auto">
+                  <div className="bg-zinc-900 rounded-3xl border-2 border-zinc-800 divide-y-2 divide-zinc-800 max-h-[500px] overflow-y-auto shadow-2xl">
                     {participants.map(p => (
-                      <div key={p.id} className="p-3 flex justify-between items-center group">
+                      <div key={p.id} className="p-6 flex justify-between items-center group hover:bg-zinc-800/30 transition-colors">
                         <div>
-                          <p className="font-bold text-white text-sm">{p.name}</p>
-                          <div className="flex items-center gap-2 mt-1">
-                            <p className="text-[10px] text-asphalt-500 font-bold uppercase">{p.carCount} คัน</p>
+                          <p className="font-black text-stone-100 text-xl italic tracking-tight">{p.name}</p>
+                          <div className="flex items-center gap-4 mt-2">
+                            <p className="text-[11px] text-rose-500 font-black uppercase italic tracking-widest">{p.carCount} คันในรายการ</p>
                             {selectedTournament.status === 'registration' && (
-                              <div className="flex items-center gap-1 ml-2">
+                              <div className="flex items-center gap-2 ml-4">
                                 <button 
                                   onClick={() => updateCarCount(p.id, -1)}
-                                  className="w-5 h-5 flex items-center justify-center bg-asphalt-700 hover:bg-asphalt-600 rounded text-xs text-white transition-colors"
+                                  className="w-8 h-8 flex items-center justify-center bg-zinc-800 hover:bg-rose-600 rounded-lg text-lg text-white font-bold transition-all shadow-md active:scale-90"
                                   title="ลดจำนวนรถ"
                                 >
                                   -
                                 </button>
                                 <button 
                                   onClick={() => updateCarCount(p.id, 1)}
-                                  className="w-5 h-5 flex items-center justify-center bg-asphalt-700 hover:bg-asphalt-600 rounded text-xs text-white transition-colors"
+                                  className="w-8 h-8 flex items-center justify-center bg-zinc-800 hover:bg-rose-600 rounded-lg text-lg text-white font-bold transition-all shadow-md active:scale-90"
                                   title="เพิ่มจำนวนรถ"
                                 >
                                   +
@@ -633,36 +685,39 @@ export default function Admin() {
                             e.stopPropagation();
                             setParticipantToDelete(p);
                           }}
-                          className="p-2 text-asphalt-700 hover:text-racing-red opacity-0 group-hover:opacity-100 transition-all font-bold"
+                          className="p-4 text-zinc-800 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all active:scale-90"
                         >
-                          <Trash2 size={16} />
+                          <Trash2 size={24} />
                         </button>
                       </div>
                     ))}
                   </div>
                 </div>
 
-                <div className="space-y-6">
-                   <h4 className="text-lg font-bold text-white">สถานะการแข่งขัน</h4>
-                   <div className="racing-card p-6 border-dashed border-asphalt-700 text-center space-y-4">
+                <div className="space-y-10">
+                   <h4 className="text-2xl font-black text-white italic uppercase flex items-center gap-3 border-b border-zinc-800 pb-4">
+                     <Shield size={28} className="text-rose-600" />
+                     สถานะสนามแข่ง
+                   </h4>
+                   <div className="bg-zinc-900 p-12 rounded-[32px] border-4 border-dashed border-zinc-800 text-center space-y-8 shadow-inner">
                       {selectedTournament.status === 'registration' ? (
                         <>
-                          <div className="w-12 h-12 bg-racing-yellow/10 text-racing-yellow rounded-full mx-auto flex items-center justify-center">
-                            <Plus size={24} />
+                          <div className="w-24 h-24 bg-amber-500/10 text-amber-500 rounded-[32px] mx-auto flex items-center justify-center shadow-xl border border-amber-500/20 rotate-12">
+                            <Plus size={48} />
                           </div>
-                          <div>
-                            <p className="text-white font-bold">เปิดรับสมัคร</p>
-                            <p className="text-asphalt-500 text-xs mt-1">เพิ่มผู้สมัครและรถทั้งหมดก่อนสร้างการแข่งขันรอบที่ 1</p>
+                          <div className="space-y-4">
+                            <p className="text-stone-100 text-3xl font-black italic tracking-tighter uppercase">รับสมัครนักแข่ง</p>
+                            <p className="text-zinc-500 text-lg font-medium leading-relaxed max-w-sm mx-auto">ลงทะเบียนนักแข่งและจำนวนรถให้เรียบร้อยก่อนทำการสุ่มจับคู่รอบที่ 1</p>
                           </div>
                         </>
                       ) : (
                         <>
-                          <div className="w-12 h-12 bg-racing-green/10 text-racing-green rounded-full mx-auto flex items-center justify-center">
-                            <Play size={24} />
+                          <div className="w-24 h-24 bg-rose-600/10 text-rose-500 rounded-[32px] mx-auto flex items-center justify-center shadow-xl border border-rose-600/20 -rotate-6">
+                            <Play size={48} fill="currentColor" />
                           </div>
-                          <div>
-                            <p className="text-white font-bold">กำลังดำเนินการแข่งขัน</p>
-                            <p className="text-asphalt-500 text-xs mt-1">คำนวณรอบการแข่งขันแล้ว ไปที่หน้ากรรมการเพื่อบันทึกผล</p>
+                          <div className="space-y-4">
+                            <p className="text-stone-100 text-3xl font-black italic tracking-tighter uppercase">กำลังแข่งขัน</p>
+                            <p className="text-zinc-500 text-lg font-medium leading-relaxed max-w-sm mx-auto">สามารถบันทึกผลการแข่งขันและตรวจสอบสถานะได้ที่หน้าแผงกรรมการ</p>
                           </div>
                         </>
                       )}
@@ -681,30 +736,30 @@ export default function Admin() {
 
       {/* Create Tournament Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="racing-card w-full max-w-md p-8 space-y-6 animate-in zoom-in-95 duration-200">
-            <h3 className="text-2xl font-black text-white italic">สร้างการแข่งขันใหม่</h3>
-            <form onSubmit={addTournament} className="space-y-4">
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-asphalt-500 uppercase tracking-widest">ชื่อรายการ</label>
-                <input required className="input-racing" value={name} onChange={e => setName(e.target.value)} placeholder="เช่น Bangkok Speed Cup" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-xl">
+          <div className="bg-zinc-900 w-full max-w-xl p-12 space-y-10 animate-in zoom-in-95 duration-300 rounded-[40px] border-2 border-zinc-800 shadow-3xl">
+            <h3 className="text-4xl font-black text-stone-100 italic uppercase tracking-tighter">สร้างสนามแข่งขันใหม่</h3>
+            <form onSubmit={addTournament} className="space-y-8">
+              <div className="space-y-3">
+                <label className="text-[12px] font-black text-rose-500 uppercase tracking-[0.3em] ml-2 italic">ชื่อสนาม / รายการ</label>
+                <input required className="input-racing bg-zinc-950 border-zinc-800 h-16 text-xl px-6 rounded-2xl" value={name} onChange={e => setName(e.target.value)} placeholder="เช่น BANGKOK GRAND PRIX 2026" />
               </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-asphalt-500 uppercase tracking-widest">ประเภท</label>
-                <select className="input-racing" value={type} onChange={e => setType(e.target.value as TournamentType)}>
-                  <option value="Opb">Opb</option>
-                  <option value="Opb Upgrade">Opb Upgrade</option>
-                  <option value="Stock Class">Stock Class</option>
-                  <option value="Open Class">Open Class</option>
+              <div className="space-y-3">
+                <label className="text-[12px] font-black text-rose-500 uppercase tracking-[0.3em] ml-2 italic">ประเภทการแข่ง</label>
+                <select className="input-racing bg-zinc-950 border-zinc-800 h-16 text-xl px-6 rounded-2xl appearance-none" value={type} onChange={e => setType(e.target.value as TournamentType)}>
+                  <option value="Opb">OPB CLASS</option>
+                  <option value="Opb Upgrade">OPB UPGRADE</option>
+                  <option value="Stock Class">STOCK CLASS</option>
+                  <option value="Open Class">OPEN CLASS</option>
                 </select>
               </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-asphalt-500 uppercase tracking-widest">วันที่แข่งขัน</label>
-                <input type="date" required className="input-racing" value={date} onChange={e => setDate(e.target.value)} />
+              <div className="space-y-3">
+                <label className="text-[12px] font-black text-rose-500 uppercase tracking-[0.3em] ml-2 italic">วันที่จัดการแข่งขัน</label>
+                <input type="date" required className="input-racing bg-zinc-950 border-zinc-800 h-16 text-xl px-6 rounded-2xl" value={date} onChange={e => setDate(e.target.value)} />
               </div>
-              <div className="flex gap-4 pt-4">
-                <button type="button" onClick={() => setShowAddModal(false)} className="btn-racing-secondary flex-1">ยกเลิก</button>
-                <button type="submit" className="btn-racing flex-1">สร้างรายการ</button>
+              <div className="flex gap-6 pt-6">
+                <button type="button" onClick={() => setShowAddModal(false)} className="btn-racing-secondary flex-1 h-16 text-lg rounded-2xl">ยกเลิก</button>
+                <button type="submit" className="btn-racing bg-rose-600 text-white flex-1 h-16 text-lg rounded-2xl shadow-2xl shadow-rose-600/20">บันทึกข้อมูล</button>
               </div>
             </form>
           </div>
@@ -713,36 +768,39 @@ export default function Admin() {
 
       {/* Delete Tournament Confirmation Modal */}
       {tournamentToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="racing-card w-full max-w-md p-8 space-y-6 border-racing-red/50 animate-in zoom-in-95 duration-200">
-            <div className="flex items-center gap-3 text-racing-red">
-              <div className="p-2 bg-racing-red/10 rounded-lg">
-                <Trash2 size={24} />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-xl">
+          <div className="bg-zinc-900 w-full max-w-xl p-12 space-y-8 border-2 border-rose-600/30 animate-in zoom-in-95 duration-300 rounded-[40px] shadow-3xl">
+            <div className="flex items-center gap-6 text-rose-500">
+              <div className="p-4 bg-rose-600/10 rounded-2xl border border-rose-600/20">
+                <Trash2 size={42} />
               </div>
-              <h3 className="text-2xl font-black italic">ลบรายการการแข่งขัน?</h3>
+              <h3 className="text-4xl font-black italic uppercase tracking-tighter">ยืนยันการลบ?</h3>
             </div>
             
-            <div className="space-y-4">
-              <p className="text-asphalt-300">
-                ยืนยันที่จะลบรายการการแข่งขัน <span className="text-white font-bold">"{tournamentToDelete.name}"</span> ใช่หรือไม่?
+            <div className="space-y-6">
+              <p className="text-stone-300 text-xl font-medium leading-relaxed">
+                คุณกำลังจะลบรายการการแข่งขัน <span className="text-white font-black italic underline decoration-rose-600 underline-offset-8">"{tournamentToDelete.name}"</span> ใช่หรือไม่?
               </p>
-              <div className="p-4 bg-racing-red/5 border border-racing-red/20 rounded-lg">
-                <p className="text-xs text-racing-red font-bold">⚠️ ข้อมูลผู้สมัครและรอบการแข่งขันทั้งหมดจะถูกลบออกจากระบบและไม่สามารถกู้คืนได้</p>
+              <div className="p-6 bg-rose-600/5 border-2 border-rose-600/20 rounded-3xl">
+                <p className="text-sm font-black text-rose-500 uppercase tracking-widest italic flex items-center gap-2">
+                  <Shield size={16} /> WARNING: SYSTEM DATA PURGE
+                </p>
+                <p className="text-stone-400 text-sm mt-3 leading-relaxed">ข้อมูลนักแข่ง รอบการแข่งขัน และสถิติทั้งหมดจะถูกลบออกถาวร ไม่สามารถกู้คืนได้ภายหลัง</p>
               </div>
             </div>
 
-            <div className="flex gap-4 pt-2">
+            <div className="flex gap-6 pt-4">
               <button 
                 type="button" 
                 onClick={() => setTournamentToDelete(null)} 
-                className="btn-racing-secondary flex-1"
+                className="btn-racing-secondary flex-1 h-16 text-lg rounded-2xl border-zinc-700 text-zinc-400"
               >
                 ยกเลิก
               </button>
               <button 
                 type="button" 
                 onClick={deleteTournament} 
-                className="btn-racing bg-racing-red flex-1"
+                className="btn-racing bg-rose-600 text-white flex-1 h-16 text-lg rounded-2xl shadow-2xl shadow-rose-600/30"
               >
                 ยืนยันการลบ
               </button>
@@ -753,31 +811,31 @@ export default function Admin() {
 
       {/* Delete Participant Confirmation Modal */}
       {participantToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="racing-card w-full max-w-md p-8 space-y-6 border-racing-red/50 animate-in zoom-in-95 duration-200">
-            <div className="flex items-center gap-3 text-racing-red">
-               <div className="p-2 bg-racing-red/10 rounded-lg">
-                <Trash2 size={24} />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-xl">
+          <div className="bg-zinc-900 w-full max-w-xl p-12 space-y-8 border-2 border-rose-600/30 animate-in zoom-in-95 duration-300 rounded-[40px] shadow-3xl">
+            <div className="flex items-center gap-6 text-rose-500">
+               <div className="p-4 bg-rose-600/10 rounded-2xl border border-rose-600/20">
+                <Trash2 size={42} />
               </div>
-              <h3 className="text-2xl font-black italic">ลบผู้สมัคร?</h3>
+              <h3 className="text-4xl font-black italic uppercase tracking-tighter">ลบผู้สมัคร?</h3>
             </div>
             
-            <p className="text-asphalt-300">
-              ยืนยันการลบผู้สมัคร: <span className="text-white font-bold">{participantToDelete.name}</span> ใช่หรือไม่?
+            <p className="text-stone-300 text-xl font-medium leading-relaxed">
+              ยืนยันการลบนักแข่ง: <span className="text-white font-black italic underline decoration-rose-600 underline-offset-8">{participantToDelete.name}</span> ใช่หรือไม่?
             </p>
 
-            <div className="flex gap-4 pt-2">
+            <div className="flex gap-6 pt-6">
               <button 
                 type="button" 
                 onClick={() => setParticipantToDelete(null)} 
-                className="btn-racing-secondary flex-1"
+                className="btn-racing-secondary flex-1 h-16 text-lg rounded-2xl text-zinc-400 border-zinc-700"
               >
                 ยกเลิก
               </button>
               <button 
                 type="button" 
                 onClick={deleteParticipant} 
-                className="btn-racing bg-racing-red flex-1"
+                className="btn-racing bg-rose-600 text-white flex-1 h-16 text-lg rounded-2xl shadow-2xl shadow-rose-600/30"
               >
                 ยืนยันการลบ
               </button>

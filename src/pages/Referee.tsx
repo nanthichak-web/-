@@ -14,7 +14,7 @@ export default function Referee() {
   
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [rounds, setRounds] = useState<Round[]>([]);
-  const [currentStage, setCurrentStage] = useState(1);
+  const [currentStage, setCurrentStage] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [sourcePlayer, setSourcePlayer] = useState<{ roundId: string, slotIndex: number, player: RoundSlot } | null>(null);
 
@@ -37,14 +37,16 @@ export default function Referee() {
       
       // Determine max stage
       const maxStage = Math.max(...docs.map(r => r.stage), 1);
-      setCurrentStage(maxStage);
+      if (currentStage === null) {
+        setCurrentStage(maxStage);
+      }
       setLoading(false);
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, `tournaments/${tournamentId}/rounds`);
     });
 
     return () => { unsubT(); unsubR(); };
-  }, [tournamentId]);
+  }, [tournamentId, currentStage]);
 
   if (!isAdmin) {
     return (
@@ -80,9 +82,9 @@ export default function Referee() {
     if (!round) return;
 
     const results = round.slots.map(s => s.result);
-    const ones = results.filter(r => r === '1').length;
+    const hasPending = results.some(r => r === 'pending');
     
-    if (ones === 0) return alert('กรุณาระบุผู้ชนะอย่างน้อย 1 รายการ');
+    if (hasPending) return alert('กรุณาระบุผลการแข่งขันให้ครบทุกคน');
 
     try {
       await updateDoc(doc(db, 'tournaments', tournamentId, 'rounds', roundId), {
@@ -255,6 +257,7 @@ export default function Referee() {
     }
 
     await batch.commit();
+    setCurrentStage(nextStage);
     alert(`สร้างรอบการแข่งขันที่ ${nextStage} สำเร็จ!`);
   };
 
@@ -277,8 +280,17 @@ export default function Referee() {
     navigate('/');
   };
 
-  const currentStageRounds = rounds.filter(r => r.stage === currentStage);
+  const stages: number[] = [];
+  rounds.forEach(r => {
+    if (!stages.includes(r.stage)) stages.push(r.stage);
+  });
+  stages.sort((a, b) => a - b);
+  
+  const latestStage = stages.length > 0 ? Math.max(...stages) : 1;
+  const stageToDisplay = currentStage || latestStage;
+  const currentStageRounds = rounds.filter(r => r.stage === stageToDisplay);
   const isStageComplete = currentStageRounds.length > 0 && currentStageRounds.every(r => r.isFinished && r.isConfirmed);
+  const isLatestStage = stageToDisplay === latestStage;
 
   if (loading) return <div className="text-center font-bold animate-pulse text-racing-red">กำลังโหลดข้อมูล...</div>;
 
@@ -296,7 +308,7 @@ export default function Referee() {
           </button>
 
           <div className="flex gap-3 w-full sm:w-auto">
-            {isStageComplete && (
+            {isStageComplete && isLatestStage && (
               currentStageRounds.length === 1 && currentStageRounds[0].slots.length <= 3 ? (
                 <button onClick={finishTournament} className="btn-racing bg-racing-green text-black w-full sm:w-auto">
                   <Trophy size={18} />
@@ -313,18 +325,35 @@ export default function Referee() {
         </div>
       </div>
 
-      <div className="flex justify-between items-center bg-asphalt-800 p-6 rounded-lg border-l-4 border-racing-red shadow-xl">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-asphalt-800 p-6 rounded-lg border-l-4 border-racing-red shadow-xl gap-6">
         <div>
           <span className="text-[10px] font-black bg-racing-red text-white px-2 py-0.5 rounded uppercase italic">โหมดกรรมการ</span>
           <h2 className="text-3xl font-black text-white tracking-tighter uppercase">{tournament?.name}</h2>
           <div className="flex items-center gap-4 mt-1">
              <div className="flex items-center gap-1 text-racing-red font-bold text-sm">
-                <Play size={14} fill="currentColor" /> รอบที่ {currentStage}
+                <Play size={14} fill="currentColor" /> รอบที่ {stageToDisplay}
              </div>
              <div className="text-asphalt-500 text-xs font-bold uppercase tracking-widest">
                 {currentStageRounds.length} คู่แข่งขันในรอบนี้
              </div>
           </div>
+        </div>
+
+        <div className="flex items-center gap-2 overflow-x-auto pb-2 md:pb-0 w-full md:w-auto">
+          {stages.map((s) => (
+            <button
+              key={s}
+              onClick={() => setCurrentStage(s)}
+              className={cn(
+                "px-4 py-2 rounded-full text-xs font-black uppercase italic tracking-tighter transition-all whitespace-nowrap",
+                stageToDisplay === s 
+                  ? "bg-racing-red text-white shadow-lg shadow-racing-red/20 scale-110" 
+                  : "bg-asphalt-700 text-asphalt-400 hover:bg-asphalt-600"
+              )}
+            >
+              รอบที่ {s}
+            </button>
+          ))}
         </div>
 
         {sourcePlayer && (
@@ -377,82 +406,104 @@ export default function Referee() {
                 
                 return (
                   <div key={sIdx} className="space-y-2">
-                    <div className="flex justify-between items-center">
-                      <div 
-                        className={cn(
-                          "transition-all cursor-pointer group relative p-2 -m-2 rounded-lg flex-1 mr-4",
-                          isSource ? "bg-racing-red/20 border border-racing-red/30 scale-105" : "hover:bg-asphalt-700/50"
-                        )}
-                         onClick={() => {
-                          if (round.isPublished || round.isFinished) return;
-                          if (!sourcePlayer) {
-                            setSourcePlayer({ roundId: round.id, slotIndex: sIdx, player: slot });
-                          } else if (isSource) {
-                            setSourcePlayer(null);
-                          } else {
-                            handePlayerSwap(round.id, sIdx, slot);
-                          }
-                        }}
-                      >
-                        <p className="font-bold text-white text-sm leading-none flex items-center gap-2">
-                          {slot.playerName}
-                          {!round.isFinished && !round.isPublished && (
-                            <ArrowLeftRight 
-                              size={12} 
-                              className={cn(
-                                "transition-opacity",
-                                isSource ? "opacity-100 text-racing-red" : "opacity-0 group-hover:opacity-100 text-asphalt-500"
-                              )} 
-                            />
-                          )}
-                        </p>
-                        <p className="text-[10px] text-asphalt-500 font-bold uppercase">รถคันที่ {slot.carIndex}</p>
-                        
-                        {!round.isFinished && !round.isPublished && !sourcePlayer && (
-                           <div className="absolute left-0 -top-6 bg-black text-[9px] text-white px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity font-bold whitespace-nowrap z-10 pointer-events-none border border-asphalt-700">
-                              คลิกเพื่อเลือก (สลับ/ย้าย)
-                           </div>
-                        )}
-                      </div>
-                      {round.isPublished ? (
-                        <div className="flex gap-1">
-                          {!round.isFinished ? (
-                            (['1', '2', '3', 'DNF'] as RoundResult[]).map((res) => (
-                              <button
-                                key={res}
-                                onClick={() => updateSlotResult(round.id, sIdx, res)}
-                                className={cn(
-                                  "w-8 h-8 rounded text-[10px] font-black transition-all border flex items-center justify-center",
-                                  slot.result === res 
-                                    ? (res === '1' ? "bg-racing-yellow border-racing-yellow text-black scale-110 shadow-lg shadow-racing-yellow/20" :
-                                       res === '2' ? "bg-white border-white text-black scale-110" :
-                                       res === '3' ? "bg-orange-600 border-orange-600 text-white scale-110" :
-                                       "bg-red-600 border-red-600 text-white scale-110")
-                                    : "bg-asphalt-900 border-asphalt-700 text-asphalt-500 hover:border-asphalt-500"
-                                )}
-                              >
-                                {res === 'DNF' ? 'D' : res}
-                              </button>
-                            ))
+                    {(() => {
+                      const isDuplicate = round.slots.filter(s => s.playerName === slot.playerName).length > 1;
+                      const prevRound = rounds.find(r => r.stage === round.stage && r.index === round.index - 1);
+                      const nextRound = rounds.find(r => r.stage === round.stage && r.index === round.index + 1);
+                      const inPrev = prevRound?.slots.some(s => s.playerName === slot.playerName);
+                      const inNext = nextRound?.slots.some(s => s.playerName === slot.playerName);
+                      const isBackToBack = inPrev || inNext;
+
+                      return (
+                        <div className="flex justify-between items-center">
+                          <div 
+                            className={cn(
+                              "transition-all cursor-pointer group relative p-2 -m-2 rounded-lg flex-1 mr-4",
+                              isSource ? "bg-racing-red/20 border border-racing-red/30 scale-105" : "hover:bg-asphalt-700/50",
+                              isDuplicate && "bg-orange-500/20 border border-orange-500/30",
+                              isBackToBack && !isDuplicate && "bg-blue-500/10 border border-blue-500/20"
+                            )}
+                             onClick={() => {
+                              if (round.isPublished || round.isFinished) return;
+                              if (!sourcePlayer) {
+                                setSourcePlayer({ roundId: round.id, slotIndex: sIdx, player: slot });
+                              } else if (isSource) {
+                                setSourcePlayer(null);
+                              } else {
+                                handePlayerSwap(round.id, sIdx, slot);
+                              }
+                            }}
+                          >
+                            <div className="flex items-center justify-between gap-4">
+                              <div className="flex flex-col">
+                                <div className="flex items-center gap-2">
+                                  <p className={cn(
+                                    "font-bold text-sm leading-none",
+                                    isDuplicate ? "text-orange-400" : isBackToBack ? "text-blue-400" : "text-white"
+                                  )}>
+                                    {slot.playerName}
+                                  </p>
+                                  
+                                  {/* Warning Badges Inline */}
+                                  <div className="flex gap-1">
+                                    {isDuplicate && (
+                                      <span className="bg-orange-600/20 text-orange-400 text-[7px] px-1.5 py-0.5 rounded border border-orange-600/30 font-black uppercase italic whitespace-nowrap">
+                                        ชื่อซ้ำ!
+                                      </span>
+                                    )}
+                                    {isBackToBack && (
+                                      <span className="bg-blue-600/20 text-blue-400 text-[7px] px-1.5 py-0.5 rounded border border-blue-600/30 font-black uppercase italic whitespace-nowrap">
+                                        {inPrev && inNext ? 'แข่ง 3 คู่ติด!' : inPrev ? 'ต่อจากคู่ที่แล้ว' : 'ต่อคู่ถัดไป'}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                                <p className="text-[10px] text-asphalt-500 font-bold uppercase mt-1">รถคันที่ {slot.carIndex}</p>
+                              </div>
+                            </div>
+                          </div>
+
+                          {round.isPublished ? (
+                            <div className="flex gap-1">
+                              {!round.isFinished ? (
+                                (['1', '2', '3', 'DNF'] as RoundResult[]).map((res) => (
+                                  <button
+                                    key={res}
+                                    onClick={() => updateSlotResult(round.id, sIdx, res)}
+                                    className={cn(
+                                      "w-8 h-8 rounded text-[10px] font-black transition-all border flex items-center justify-center",
+                                      slot.result === res 
+                                        ? (res === '1' ? "bg-racing-yellow border-racing-yellow text-black scale-110 shadow-lg shadow-racing-yellow/20" :
+                                           res === '2' ? "bg-white border-white text-black scale-110" :
+                                           res === '3' ? "bg-orange-600 border-orange-600 text-white scale-110" :
+                                           "bg-red-600 border-red-600 text-white scale-110")
+                                        : "bg-asphalt-900 border-asphalt-700 text-asphalt-500 hover:border-asphalt-500"
+                                    )}
+                                  >
+                                    {res === 'DNF' ? 'D' : res}
+                                  </button>
+                                ))
+                              ) : (
+                                <div className="flex flex-col items-end gap-2">
+                                  <span className={cn(
+                                    "text-[10px] font-black px-2 py-1 rounded uppercase min-w-[2rem] text-center",
+                                    slot.result === '1' ? "bg-racing-yellow text-black" :
+                                    slot.result === '2' ? "bg-white/90 text-black" :
+                                    slot.result === '3' ? "bg-orange-600 text-white" : "bg-red-900 text-white"
+                                  )}>
+                                    {slot.result}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
                           ) : (
-                            <div className="flex flex-col items-end gap-2">
-                              <span className={cn(
-                                "text-[10px] font-black px-2 py-1 rounded uppercase min-w-[2rem] text-center",
-                                slot.result === '1' ? "bg-racing-yellow text-black" :
-                                slot.result === '2' ? "bg-white/90 text-black" :
-                                slot.result === '3' ? "bg-orange-600 text-white" : "bg-red-900 text-white"
-                              )}>
-                                {slot.result}
-                              </span>
+                            <div className="text-[8px] font-bold text-asphalt-600 uppercase bg-asphalt-800 px-2 py-1 rounded border border-asphalt-700">
+                              รอยืนยันตาราง
                             </div>
                           )}
                         </div>
-                      ) : (
-                        <div className="text-[8px] font-bold text-asphalt-600 uppercase bg-asphalt-800 px-2 py-1 rounded border border-asphalt-700">
-                          รอยืนยันตาราง
-                        </div>
-                      )}
-                    </div>
+                      );
+                    })()}
                   </div>
                 );
               })}
